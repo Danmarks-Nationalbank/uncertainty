@@ -50,7 +50,11 @@ MANIFEST
 env/*
 
 # Data folder
+data/*
 
 # Scripts we don't want to track
+scripts/scraps/*
 
+# VScode folder
+.ipynb_checkpoints*/
 
