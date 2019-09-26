@@ -47,3 +47,10 @@ MANIFEST
 
 # Per-project virtualenvs
 .venv*/
+env/*
+
+# Data folder
+
+# Scripts we don't want to track
+
+

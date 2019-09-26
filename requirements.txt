@@ -14,4 +14,15 @@
 # Example:
 # numpy==1.13.3
 # scipy==1.0
+# Note: There's a weird bug for setting up the python kernel with pywin32, 
+# which is a requirement. To fix it, in the environment copy the dll libs in 
+# Lib/site-packages/pywin32_system32 into Lib/site-packages/win32.
 
+numpy           == 1.17.1
+pandas          == 0.25.1
+nltk            == 3.4.5
+matplotlib      == 3.0.3
+ipython         == 7.6.0
+ipykernel       == 5.1.2
+pylint          == 2.4.0
+jupyterlab      == 1.1.1
