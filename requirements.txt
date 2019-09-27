@@ -22,7 +22,7 @@ numpy           == 1.17.1
 pandas          == 0.25.1
 nltk            == 3.4.5
 matplotlib      == 3.0.3
-ipython         == 7.6.0
-ipykernel       == 5.1.2
+# ipython         == 7.6.0
+# ipykernel       == 5.1.2
 pylint          == 2.4.0
-jupyterlab      == 1.1.1
+# jupyterlab      == 1.1.1

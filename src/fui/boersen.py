@@ -170,6 +170,7 @@ def plot_index(
 
     toplot = smooth(plot[index_name, 'mean'], smoothing)
 
+
     if refactor:
         max_0 = toplot.max()
         min_0 = toplot.min()
@@ -177,15 +178,16 @@ def plot_index(
         min_w = -2.5
         scale = (max_w - min_w)/(max_0 - min_0)
         toplot = toplot*scale - max_0*scale + max_w
+        plot[index_name, 'mean'] = plot[index_name, 'mean']*scale - max_0*scale + max_w
 
     fig, ax = plt.subplots(figsize=(14,6))
-    # ax.scatter(plot['ArticleDateCreated'], plot[index_name, 'mean'], s=plot[index_name, 'count']/800) 
+    ax.scatter(plot['ArticleDateCreated'], plot[index_name, 'mean'], s=plot[index_name, 'count']/800, label=None) 
     index_line, = ax.plot(plot['ArticleDateCreated'].loc[smoothing-1:], toplot, lw=2, label='Newspaper index')
     ax.legend([index_line], ['Newspaper index'], frameon=False)
 
     if plot_gdp:
         # Load gdp data
-        gdp = pd.read_csv('data/gdp3.csv', usecols=[2,3], names=['quarter', 'growth'])
+        gdp = pd.read_csv('../data/gdp3.csv', usecols=[2,3], names=['quarter', 'growth'])
         gdp['quarter'] = pd.to_datetime(gdp['quarter'].str.replace('K', 'Q')) + pd.DateOffset(months=3)
 
         # plot gdp data
