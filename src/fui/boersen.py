@@ -91,27 +91,22 @@ def load_raw_data(datafile='data/Nat_bank_articles.csv', nrows=None):
     """
     # Load the data
     df = pd.read_csv(datafile, sep=';', encoding='UTF-16', error_bad_lines=False, nrows=nrows)
+    
     print('Dropping articles with NaN content...')
     start_n = df.shape[0] 
     # df = df[df['Title']!='test']
     df = df[df['ArticleContents'].apply(type) == str]
     end_n = df.shape[0]
     print('Dropped {} articles with NaN content'.format(start_n-end_n))
-    # print('Keeping only Børsen articles...')
-    # start_n = df.shape[0] 
-    # # df = df[df['Title']!='test']
-    # df = df[df['Supplier'] == 'Børsen']
-    # end_n = df.shape[0]
-    # print('Dropped {} articles not in Børsen'.format(start_n-end_n))
+
     print('Dropping articles in pleasure section...')
     start_n = df.shape[0] 
-    # df = df[df['Title']!='test']
     df = df[df['SectionWebSite'] != 'pleasure']
     end_n = df.shape[0]
     print('Dropped {} articles in pleasure website section'.format(start_n-end_n))
+
     print('Dropping articles with SectionName not being string...')
     start_n = df.shape[0] 
-    # df = df[df['Title']!='test']
     df = df[df['SectionName'].apply(type) == str]
     df = df[df['SectionName'].str.isnumeric() == False]
     end_n = df.shape[0]
