@@ -1,6 +1,5 @@
 import re
 from afinn import Afinn
-import time
 import numpy as np
 import pandas as pd
 import datetime
@@ -32,15 +31,17 @@ def define_NB_colors():
     plt.rcParams["axes.prop_cycle"] = c
     return c
 
-afinn = Afinn(language='da')
-stemmer = SnowballStemmer("danish")
 
-def f_writetime(time):
-    hours = np.int8(np.floor(time/3600))
-    minutes = np.int8(np.floor((time - hours*3600)/60))
-    seconds = np.floor(time - hours*3600 - minutes*60)
+def enrich_text(series):
+    """
+    Takes a series and returns lists of sentiment
+    """
+    afinn = Afinn(language='da')
+    with Pool() as pool:
+        afinn_scores = pool.map(afinn.score, series.values.tolist())
+        bloom_scores = pool.map(bloom_measure, series.values.tolist())
     
-    return str(hours) + " hour(s), " + str(minutes) + " minute(s), and " + str(seconds) + " seconds"
+    return afinn_scores, bloom_scores
 
 def cleanhtml(text):
     cleanr = re.compile('<.*?>')
@@ -59,6 +60,7 @@ def stemtext(text):
     list_to_stem = regex.sub('', text).split()
 
     # stem each word and join
+    stemmer = SnowballStemmer("danish")
     stem_set = set([stemmer.stem(word) for word in list_to_stem])
     return stem_set
 
@@ -76,7 +78,6 @@ def bloom_measure(text, bloomtuple=None):
     stem_set = stemtext(text)
 
     return bool(bloom_E & stem_set) & bool(bloom_P & stem_set) & bool(bloom_U & stem_set)
-
 
 def process_text(series):
     with Pool() as pool:
@@ -98,12 +99,6 @@ def load_raw_data(datafile='data/Nat_bank_articles.csv', nrows=None):
     df = df[df['ArticleContents'].apply(type) == str]
     end_n = df.shape[0]
     print('Dropped {} articles with NaN content'.format(start_n-end_n))
-
-    print('Dropping articles in pleasure section...')
-    start_n = df.shape[0] 
-    df = df[df['SectionWebSite'] != 'pleasure']
-    end_n = df.shape[0]
-    print('Dropped {} articles in pleasure website section'.format(start_n-end_n))
 
     print('Dropping articles with SectionName not being string...')
     start_n = df.shape[0] 
@@ -182,7 +177,7 @@ def plot_index(
 
     if plot_gdp:
         # Load gdp data
-        gdp = pd.read_csv('../data/gdp3.csv', usecols=[2,3], names=['quarter', 'growth'])
+        gdp = pd.read_csv('../../data/gdp3.csv', usecols=[2,3], names=['quarter', 'growth'])
         gdp['quarter'] = pd.to_datetime(gdp['quarter'].str.replace('K', 'Q')) + pd.DateOffset(months=3)
 
         # plot gdp data
@@ -222,13 +217,3 @@ def smooth(y, smoothing_points):
     y_smooth = np.convolve(y, box, mode='valid')
 
     return y_smooth
-
-def enrich_text(series):
-    """
-    Takes a series and returns lists of sentiment
-    """
-    with Pool() as pool:
-        afinn_scores = pool.map(afinn.score, series.values.tolist())
-        bloom_scores = pool.map(bloom_measure, series.values.tolist())
-    
-    return afinn_scores, bloom_scores
