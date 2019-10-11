@@ -9,39 +9,67 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from nltk.stem.snowball import SnowballStemmer
 from gensim.models import KeyedVectors
+import copy
+import os
+import glob
 
-from src.fui.utils import dump_pickle
+from fui.utils import dump_pickle, dump_csv
 
 def extend_dict_w2v(dict_name, params, n_words=10):
-    model = KeyedVectors.load_word2vec_format(params['paths']['w2v_model'], binary=False)
+    """
+    extends bloom dictionary with similar words using a pre-trained
+    embedding. Default: https://fasttext.cc/docs/en/crawl-vectors.html
+    n_words: include n_nearest words to subject word.
+    """
+    
+    model = KeyedVectors.load_word2vec_format(params['paths']['root']+
+                                              params['paths']['w2v_model'], binary=False)
+    print("Model loaded")
+    dict_out = copy.deepcopy(params['bloom'])
     for k, v in params[dict_name].items():
-        for v in v:
+        for val in v:
             #print('\n'+v)
             try:
-                similar_words = [w[0] for w in model.most_similar(positive=v, topn=n_words)]
-                params[dict_name][k].extend(_check_stem_duplicates(similar_words))
+                similar_words = [w[0] for w in model.most_similar(positive=val, topn=n_words)]
+                dict_out[k].extend(_check_stem_duplicates(similar_words))
                 #print('\n',model.most_similar(positive=v))
             except KeyError:
                 continue
-    return params[dict_name]
+    return dict_out
             
 def _check_stem_duplicates(word_list):
+    """
+    stems list of words and removes any resulting duplicates
+    """
     stemmer = SnowballStemmer("danish")
     stemmed_list = [stemmer.stem(word) for word in word_list]
     #remove duplicates after stemming
     stemmed_list = list(dict.fromkeys(stemmed_list))
     return stemmed_list
         
-def bloom_measure(filelist, dict_name, params, bloomtuple=None):
-    if bloomtuple is None:
-        b_E, b_P, b_U = _get_bloom_sets(params[dict_name])
-    else:
-        b_E, b_P, b_U = bloomtuple
-    print('Economic words: ' + repr(b_E) +
+def bloom_measure(params, dict_name, logic, start_year=2000, end_year=2019):
+    """
+    Finds for articles containing words in bloom dictionary.
+    params: dict of input_params
+    dict_name: name of bloom dict in params
+    logic: matching criteria in params
+    """
+    out_path = params['paths']['root']+params['paths']['bloom']+dict_name+'\\'+logic
+    if not os.path.exists(out_path):
+        os.makedirs(out_path)        
+    
+    b_E, b_P, b_U = _get_bloom_sets(params[dict_name])
+    logic_str = params['options']['bloom_logic'][logic]
+    print('\nLogic: '+logic_str)
+    print('\n\nEconomic words: ' + repr(b_E) +
           '\n\n Political words: ' + repr(b_P) +
           '\n\n Uncertainty words: ' + repr(b_U))
     
-    #df_main = pd.DataFrame()
+    #get parsed articles
+    filelist = glob.glob(params['paths']['root']+
+                         params['paths']['parsed_news']+'boersen*.pkl') 
+    filelist = [(f,int(f[-8:-4])) for f in filelist 
+                if int(f[-8:-4]) >= start_year and int(f[-8:-4]) <= end_year]
     for f in filelist:
         print('\nNow processing year '+str(f[1]))
         with open(f[0], 'rb') as data:
@@ -49,15 +77,54 @@ def bloom_measure(filelist, dict_name, params, bloomtuple=None):
                 df = pickle.load(data)
             except TypeError:
                 print("Parsed news is not a valid pickle!")
+            
+        #stem articles
         with Pool() as pool:
-            df['body_stemmed'] = pool.map(_stemtext, df['ArticleContents'].values.tolist())
-        print(df['body_stemmed'].head(10))
+            df['body_stemmed'] = pool.map(_stemtext, 
+                                          df['ArticleContents'].values.tolist())
+            
+        #compare to dictionary
         with Pool() as pool:
-            df['bloom'] = pool.map(partial(_bloom_compare, bloom_E=b_E, bloom_P=b_P, bloom_U=b_U), df['body_stemmed'].values.tolist())
-        dump_pickle(params['paths']['parsed_news'],dict_name+'_E&P&U_'+str(f[1])+'.pkl',df[['ID2','bloom','ArticleDateCreated']])
-        #df_main = df_main.append(df)
-    #return df_main
-
+            df['bloom'] = pool.map(partial(_bloom_compare, 
+                                          logic=logic_str, 
+                                          bloom_E=b_E, 
+                                          bloom_P=b_P, 
+                                          bloom_U=b_U), 
+                                          df['body_stemmed'].values.tolist())
+        
+        #save to disk
+        dump_pickle(out_path,'bloom'+str(f[1])+'.pkl',df[['ID2','bloom','ArticleDateCreated']])
+        
+        
+def bloom_aggregate(folder_path, params, aggregation=['W','M','Q']):
+    list_bloom = glob.glob(folder_path+'\\*.pkl')
+    """
+    loads saved bloom pickles and aggregates to means within 
+    each aggregation frequency
+    """
+    if len(list_bloom):
+        df = pd.DataFrame()
+        for f in list_bloom:
+            with open(f, 'rb') as data:
+               df = df.append(pickle.load(data))
+    else:
+        print(f"No pickles in folder {folder_path}")
+    
+    agg_dict = {}
+    for f in aggregation:
+        bloom_idx = df[['bloom', 'ArticleDateCreated']].groupby(
+            [pd.Grouper(key='ArticleDateCreated', freq=f)]
+        ).agg(['mean']).reset_index()
+    
+        #normalize to mean = 0, std = 1
+        bloom_idx.columns = bloom_idx.columns.get_level_values(0)
+        bloom_idx['bloom_norm']=(bloom_idx['bloom']-bloom_idx['bloom'].mean())/bloom_idx['bloom'].std()
+        bloom_idx.set_index('ArticleDateCreated', inplace=True)
+        
+        dump_csv(folder_path,'bloom_score_'+f+'.csv',bloom_idx)
+        agg_dict[f] = bloom_idx
+    return agg_dict
+        
 def plot_index(
     df, index_name, frequency=None, smoothing=None, plot_gdp=False,
     export_index=False, split=None, refactor = True):
@@ -132,6 +199,23 @@ def plot_index(
     else:
         return fig, ax
 
+def define_NB_colors():
+    """
+    Defines Nationalbankens' colors and update matplotlib to use those as default
+    """
+    c = cycler(
+        'color',
+        [
+            (0/255, 123/255, 209/255),
+            (146/255, 34/255, 156/255),
+            (196/255, 61/255, 33/255),
+            (223/255, 147/255, 55/255),
+            (176/255, 210/255, 71/255),
+            (102/255, 102/255, 102/255)
+        ])
+    plt.rcParams["axes.prop_cycle"] = c
+    return c
+
 def _stemtext(text):
     # Remove any non-alphabetic character, split by space
     regex = re.compile('[^ÆØÅæøåa-zA-Z -]')
@@ -142,8 +226,8 @@ def _stemtext(text):
     stem_set = set([stemmer.stem(word) for word in list_to_stem])
     return stem_set
 
-def _bloom_compare(stem_set, bloom_E, bloom_P, bloom_U):          
-    return bool(bloom_E & stem_set) and bool(bloom_P & stem_set) and bool(bloom_U & stem_set)
+def _bloom_compare(stem_set, logic, bloom_E, bloom_P, bloom_U):          
+    return eval(logic)
 
 def _get_bloom_sets(bloom_dict):
     b_E = set(bloom_dict['economic'])
