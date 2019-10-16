@@ -5,14 +5,16 @@ import os
 import pandas as pd
 import pickle
 import random
+import csv
 
 from collections import Counter
 from functools import partial
 from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 from multiprocessing import Pool
-from wordcloud import WordCloud
+#from wordcloud import WordCloud
 from nltk.stem.snowball import SnowballStemmer
+import lemmy
 
 from src.fui.utils import timestamp
 
@@ -25,40 +27,21 @@ def __remove_stopwords(word_list, stopfile):
     word_list = [word for word in word_list if word not in stopwords]
     return word_list   
 
-def preprocess(text, stopfile = 'data/stopwords.txt'):
+def preprocess(text, lemmatizer, stopfile='data/stopwords.txt'):
     """
     - simple_preprocess (convert all words to lowercase, remove punctuations, floats, newlines (\n),
     tabs (\t) and split to words)
     - remove all stopwords
     - remove words with a length < threshold
-    - stem
+    - lemmatize
     """
-    stemmer = SnowballStemmer("danish")
-    
     text = gensim.utils.simple_preprocess(text, deacc=True)
     list_to_stem = __remove_stopwords(text, stopfile)
     
-    text = [word for word in text if len(word) >= 3]
+    text = [word for word in list_to_stem if len(word) >= 3]
     
-    stemmed_list = [stemmer.stem(word) for word in list_to_stem]
-    return ' '.join([word for word in stemmed_list])
-
-#    
-#    def preprocess(text):
-#        """
-#        - simple_preprocess (convert all words to lowercase, remove punctuations, floats, newlines (\n),
-#        tabs (\t) and split to words)
-#        - remove all stopwords
-#        - remove words with a length < threshold
-#        - lemmatize and stem
-#        """
-#        lemmatizer = WordNetLemmatizer()
-#
-#        text = gensim.utils.simple_preprocess(text, deacc=True)
-#        text = [word for word in text if word not in gensim.parsing.preprocessing.STOPWORDS]
-#        text = [word for word in text if len(word) >= 3]
-#        return ' '.join([lemmatizer.lemmatize(word, 'v') for word in text])
-
+    lemmed_list = [lemmatizer.lemmatize("", word)[0] for word in text]
+    return ' '.join([word for word in lemmed_list])
 
 def optimize_topics(lda_instance, topics_to_optimize, plot=True, plot_title=""):
     coherence_scores = []
@@ -71,28 +54,33 @@ def optimize_topics(lda_instance, topics_to_optimize, plot=True, plot_title=""):
         lda_model_n = gensim.models.LdaMulticore(corpus=lda_instance.SerializedCorpus,
                                                  num_topics=num_topics,
                                                  id2word=lda_instance.dictionary,
-                                                 passes=1,
+                                                 passes=1, per_word_topics=False,
                                                  # alpha=50/num_topics,
                                                  # eta=0.005,
-                                                 workers=6)
+                                                 workers=10)
 
         coherence_model_n = gensim.models.CoherenceModel(model=lda_model_n,
                                                          texts=(articles for articles in lda_instance),
                                                          dictionary=lda_instance.dictionary,
                                                          coherence='c_v',
-                                                         processes=6)
+                                                         processes=10)
         lda_models.append(lda_model_n)
         coherence_scores.append(coherence_model_n.get_coherence())
 
     for n, cv in zip(topics_to_optimize, coherence_scores):
         print("LDA with {} topics has a coherence-score {}".format(n, round(cv, 2)))
+        
+    with open('coherence.csv', 'w', newline='') as csvout:
+        wr = csv.writer(csvout, delimiter=',')
+        for cv, n in zip(coherence_scores, topics_to_optimize):
+            wr.writerow([n,cv])
 
     if plot:
         plt.plot(topics_to_optimize, coherence_scores)
         plt.xlabel('Number of topics')
         plt.ylabel('Coherence score')
-        plot_title += str(lda_instance.params.lda['tf-idf'])
-        plt.title(plot_title)
+        #plot_title += str(lda_instance.params.lda['tf-idf'])
+        #plt.title(plot_title)
         plt.show()
 
     return lda_models, coherence_scores
@@ -103,7 +91,7 @@ def create_dictionary(lda_instance, params, unwanted_words=None, keep_words=None
     # Clean and write texts to HDF
     if not lda_instance.load_processed_text():
         lda_instance.load_and_clean_body_text()
-
+        
     # Create dictionary (id2word)
     file_path = os.path.join(params['paths']['lda'], params['filenames']['lda_dictionary'])
     try:
@@ -111,6 +99,9 @@ def create_dictionary(lda_instance, params, unwanted_words=None, keep_words=None
         print("Loaded pre-existing dictionary")
     except FileNotFoundError:
         print("Dictionary not found, creating from scratch")
+        if not hasattr(lda_instance, 'bigram_phraser'):
+            lda_instance.load_bigrams()
+        
         lda_instance.dictionary = gensim.corpora.Dictionary(articles for articles in lda_instance)
 
         lda_instance.dictionary.filter_extremes(no_below=params['options']['lda']['no_below'],
@@ -123,7 +114,6 @@ def create_dictionary(lda_instance, params, unwanted_words=None, keep_words=None
         lda_instance.dictionary.filter_tokens(bad_ids=unwanted_ids)
         lda_instance.dictionary.compactify()
         lda_instance.dictionary.save(file_path)
-
     print("\t{}".format(lda_instance.dictionary))
 
 
@@ -133,7 +123,7 @@ def create_corpus(lda_instance, params):
     class MyCorpus:
         def __iter__(self):
             for line in lda_instance.articles:
-                yield lda_instance.dictionary.doc2bow(line.split())
+                yield lda_instance.dictionary.doc2bow(lda_instance.bigram_phraser[line.split()])
 
     # Serialize corpus using either BoW of tf-idf
     corpus_bow = MyCorpus()
@@ -144,6 +134,8 @@ def create_corpus(lda_instance, params):
         print("Loaded pre-existing corpus")
     except FileNotFoundError:
         print("Corpus not found, creating from scratch")
+        if not hasattr(lda_instance, 'bigram_phraser'):
+            lda_instance.load_bigrams()
 
         # Serialize corpus (either BoW or tf-idf)
         if not params['options']['lda']['tf-idf']:
@@ -184,7 +176,83 @@ def load_model(lda_instance, num_topics, params):
     except FileNotFoundError:
         print("Error: LDA-model not found")
         lda_instance.lda_models = None
+        
+def load_models(lda_instance, topics, params, plot=True):
+    lda_models = []
+    coherence_scores = []
+    file_list = []
+    for t in topics: 
+        file_list.append(os.path.join(params['paths']['lda'], 'lda_model_' 
+                                      + str(t)+ '\\trained_lda'))
 
+
+    for f in file_list:
+        try:
+            lda_model_n = gensim.models.LdaMulticore.load(f)
+            print(f"LDA-model at {f} loaded, getting coherence score")
+            coherence_model_n = gensim.models.CoherenceModel(model=lda_model_n,
+                                                         texts=(articles for articles in lda_instance),
+                                                         dictionary=lda_instance.dictionary,
+                                                         coherence='c_v',
+                                                         processes=10)
+            
+            lda_models.append(lda_model_n)
+            cv = coherence_model_n.get_coherence()
+            coherence_scores.append(cv)
+            print("LDA at %s topics has a coherence-score %8.2f" % (f, cv))
+
+        except FileNotFoundError:
+            print(f"Error: LDA-model at {f} not found")
+    
+    with open('coherence.csv', 'w', newline='') as csvout:
+        wr = csv.writer(csvout, delimiter=',')
+        for cv, n in zip(coherence_scores, topics):
+            wr.writerow([n,cv])
+    
+    if plot:
+        plt.plot(topics, coherence_scores)
+        plt.xlabel('Number of topics')
+        plt.ylabel('Coherence score')
+        #plot_title += str(lda_instance.params.lda['tf-idf'])
+        #plt.title(plot_title)
+        plt.show()
+
+    return lda_models, coherence_scores
+
+def _get_scaled_significance(lda_instance, params, n_words=200):
+    _cols = ['token_id', 'weight', 'topic']
+    df = pd.DataFrame(data=None, columns=_cols)
+    num_topics = lda_instance.lda_models.num_topics
+    
+    for i in range(0,num_topics,1):
+        _list = lda_instance.lda_models.get_topic_terms(i,200)
+        df_n = pd.DataFrame(_list, columns=_cols[0:2])
+        df_n['topic'] = i
+        df = df.append(df_n)
+        
+    df = df.set_index(['token_id','topic'])
+    df = df.join(df.groupby(level=0).sum(),how='inner',rsuffix='_sum').groupby(level=[0,1]).first()
+    df['scaled_weight'] = df['weight']/df['weight_sum']
+    df.sort_values(['topic','scaled_weight'],inplace=True,ascending=False)
+    return df['scaled_weight']
+
+def get_top_words(lda_instance, params, topn=10):
+    df = _get_scaled_significance(lda_instance, params, 200)
+    df_out = pd.DataFrame(data=None, columns=['scaled_weight','word'])
+    print(df_out.index)
+    num_topics = lda_instance.lda_models.num_topics
+    for i in range(0,num_topics,1):
+        tokens = []
+        df_topic = df[df.index.get_level_values('topic') == i]
+        df_topic = df_topic[0:topn]
+        for t in range(0,topn,1):
+            tokens.append(lda_instance.dictionary[df_topic.index.values[t][0]])
+        tokens = pd.DataFrame(tokens, index=df_topic.index, columns=['word'])
+        df_topic = pd.concat([df_topic,tokens], axis=1)
+        print(tokens)
+        print(df_topic)
+        df_out = df_out.append(df_topic)
+    return df_out
 
 def merge_documents_and_topics(lda_instance, params):
 
