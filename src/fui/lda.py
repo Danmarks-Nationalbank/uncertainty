@@ -13,7 +13,6 @@ import json
 
 from src.fui.ldatools import preprocess
 from src.fui.utils import timestamp
-
 from collections import Counter
 from datetime import timedelta, datetime
 from functools import partial
@@ -23,8 +22,9 @@ from multiprocessing import Pool
 from wordcloud import WordCloud
 from nltk.stem.snowball import SnowballStemmer
 
+
 class LDA:
-    def __init__(self, files_list, params, test=False):
+    def __init__(self, files_list, params, lemmatizer, test=False):
         self.dictionary = None
         self.articles = []
         self.article_id = []
@@ -32,6 +32,8 @@ class LDA:
         self.test = test        
         self.files_list = files_list
         self.params = params
+        self.lemmatizer = lemmatizer
+        self.load_bigrams = load_bigrams
                 
         if self.params['options']['lda']['log']:
             import logging
@@ -42,7 +44,7 @@ class LDA:
 
     def __iter__(self):
         for line in self.articles:
-            yield line.split()
+            yield self.bigram_phraser[line.split()]
 
     def load_and_clean_body_text(self):
         print("No existing pre-processed data found. Loading {} file(s) for preprocessing".format(len(self.files_list)))
@@ -67,7 +69,9 @@ class LDA:
         if len(self.articles):
             print("\tProcessing {} documents for LDA".format(len(self.articles)))
             with Pool(self.params['options']['threads']) as pool:
-                self.articles = pool.map(preprocess, self.articles)
+                self.articles = pool.map(partial(preprocess, 
+                                                 lemmatizer=self.lemmatizer), 
+                                                 self.articles)
 
             print("\tSaving cleaned documents")
             folder_path = self.params['paths']['lda']
@@ -77,8 +81,10 @@ class LDA:
             file_path = os.path.join(folder_path, self.params['filenames']['lda_cleaned_text'])
             with h5py.File(file_path, 'w') as hf:
                 data = np.array(list(zip(self.article_id, self.articles)), dtype=object)
-                string_dt = h5py.special_dtype(vlen=str)
+                string_dt = h5py.string_dtype(encoding='utf-8')
                 hf.create_dataset('parsed_strings', data=data, dtype=string_dt)
+        # Train bigram model
+        self.load_bigrams()
 
     def load_processed_text(self):
         try:
@@ -88,10 +94,25 @@ class LDA:
                 self.article_id = list(zip(*hf))[0]
                 self.articles = list(zip(*hf))[1]
                 print("\t{} documents loaded".format(len(self.articles)))
-                return 1
+            return 1
         except OSError:
             return 0
-
+    
+    def load_bigrams(self):
+        if os.path.isfile(os.path.join(self.params['paths']['lda'],'phrases.pkl')):
+            phrases = gensim.utils.SaveLoad.load(os.path.join(self.params['paths']['lda'],'phrases.pkl'))
+            self.bigram_phraser = gensim.models.phrases.Phraser(phrases)
+            print("Bigram phraser loaded")
+        else:
+            print("Bigram phraser not found, training")
+            with h5py.File(os.path.join(self.params['paths']['lda'], self.params['filenames']['lda_cleaned_text']), 'r') as hf:
+                hf = hf['parsed_strings'][:]
+                articles_to_phrasing  = [a[1].split() for a in hf]
+            phrases = gensim.models.phrases.Phrases(articles_to_phrasing, self.params['options']['lda']['no_below'])
+            phrases.save(os.path.join(self.params['paths']['lda'],'phrases.pkl'), separately=None, sep_limit=10485760, ignore=frozenset([]), pickle_protocol=2)
+            self.bigram_phraser = gensim.models.phrases.Phraser(phrases)
+            print("Bigram phraser loaded")
+        
     @staticmethod
     def get_topics(lda_model, dictionary, text):
         bow = dictionary.doc2bow(text.split())
