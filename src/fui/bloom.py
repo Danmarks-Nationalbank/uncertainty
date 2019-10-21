@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from nltk.stem.snowball import SnowballStemmer
 from gensim.models import KeyedVectors
+from cycler import cycler
+
 import copy
 import os
 import glob
@@ -17,8 +19,11 @@ from fui.utils import dump_pickle, dump_csv
 
 def extend_dict_w2v(dict_name, params, n_words=10):
     """
-    extends bloom dictionary with similar words using a pre-trained
-    embedding. Default: https://fasttext.cc/docs/en/crawl-vectors.html
+    Extends bloom dictionary with similar words using a pre-trained
+    embedding. Default model: https://fasttext.cc/docs/en/crawl-vectors.html
+    args:
+    params: input_params.json
+    dict_name: name of Bloom dict in params
     n_words: include n_nearest words to subject word.
     """
     
@@ -39,7 +44,7 @@ def extend_dict_w2v(dict_name, params, n_words=10):
             
 def _check_stem_duplicates(word_list):
     """
-    stems list of words and removes any resulting duplicates
+    Stems list of words and removes any resulting duplicates
     """
     stemmer = SnowballStemmer("danish")
     stemmed_list = [stemmer.stem(word) for word in word_list]
@@ -49,7 +54,8 @@ def _check_stem_duplicates(word_list):
         
 def bloom_measure(params, dict_name, logic, start_year=2000, end_year=2019):
     """
-    Finds for articles containing words in bloom dictionary.
+    Finds for articles containing words in bloom dictionary. Saves result to disk.
+    args:
     params: dict of input_params
     dict_name: name of bloom dict in params
     logic: matching criteria in params
@@ -126,78 +132,49 @@ def bloom_aggregate(folder_path, params, aggregation=['W','M','Q']):
     return agg_dict
         
 def plot_index(
-    df, index_name, frequency=None, smoothing=None, plot_gdp=False,
-    export_index=False, split=None, refactor = True):
+    out_path, df_dict, params, plot_vix=True, freq='M', start_year=2012, end_year=2019):
     """
     """
-    # Set default parameters
-    if frequency is None:
-        if index_name=='afinn_norm':
-            frequency = 'W'
-        elif index_name == 'bloom':
-            frequency = 'M'
-        else:
-            frequency = 'W'
-    if smoothing is None:
-        if index_name=='afinn_norm':
-            smoothing = 15
-        elif index_name == 'bloom':
-            smoothing = 3
-        else:
-            smoothing = 10
-    
-    # Plot index
-    plot = df[[index_name, 'ArticleDateCreated']].groupby(
-        [pd.Grouper(key='ArticleDateCreated', freq=frequency)]
-    ).agg(['mean', 'count']).reset_index()
-
-    if split is not None:
-        plot[index_name, 'mean'] = plot[index_name, 'mean'] - df[[not i for i in split]][[index_name, 'ArticleDateCreated']].groupby(
-            [pd.Grouper(key='ArticleDateCreated', freq=frequency)]
-        ).agg('mean').reset_index()[index_name]
-        # print(plot)
-
-    if index_name == 'bloom':
-        plot[index_name, 'mean'] = plot[index_name, 'mean']*(-1)
-
-    toplot = _smooth(plot[index_name, 'mean'], smoothing)
-
-    if refactor:
-        max_0 = toplot.max()
-        min_0 = toplot.min()
-        max_w = 3
-        min_w = -2.5
-        scale = (max_w - min_w)/(max_0 - min_0)
-        toplot = toplot*scale - max_0*scale + max_w
-        plot[index_name, 'mean'] = plot[index_name, 'mean']*scale - max_0*scale + max_w
-
-    fig, ax = plt.subplots(figsize=(14,6))
-    ax.scatter(plot['ArticleDateCreated'], plot[index_name, 'mean'], s=plot[index_name, 'count']/800, label=None) 
-    index_line, = ax.plot(plot['ArticleDateCreated'].loc[smoothing-1:], toplot, lw=2, label='Newspaper index')
-    ax.legend([index_line], ['Newspaper index'], frameon=False)
-
-    if plot_gdp:
-        # Load gdp data
-        gdp = pd.read_csv('../../data/gdp3.csv', usecols=[2,3], names=['quarter', 'growth'])
-        gdp['quarter'] = pd.to_datetime(gdp['quarter'].str.replace('K', 'Q')) + pd.DateOffset(months=3)
-
-        # plot gdp data
-        # ax2 = ax.twinx()
-        ax.plot(gdp['quarter'], gdp['growth'], color = plt.rcParams["axes.prop_cycle"].by_key()["color"][1], ls = '--', label='GDP growth in quarter')
-        ax.legend(loc='lower right', frameon=False)
-
-        # ax2.set_ylabel('GDP growth (%)')
-
-    fig, ax = _format_time_ticks(fig, ax)
-    
-    if export_index:
-        index = pd.DataFrame()
-        index['date'] = plot['ArticleDateCreated'].loc[smoothing-1:]
-        index[index_name] = smooth(plot[index_name, 'mean'], smoothing)
-        plot[str(index_name+'_norm')]=(df[index_name]-df[index_name].mean())/df[index_name].std()
-        return fig, ax, index, plot
+    define_NB_colors()
+    years = mdates.YearLocator()   # every year
+    months = mdates.MonthLocator((1,4,7,10))  
+    years_fmt = mdates.DateFormatter('%Y')
+    if end_year == 2019:
+        end_str = '-05-31'
     else:
-        return fig, ax
+        end_str = ''
+    
+    vix = pd.read_csv(params['paths']['root']+'data/vixcurrent.csv', usecols=[0,4], names=['date','vix'], header=0)
+    vix['date'] = pd.to_datetime(vix['date'])
+    vix.set_index('date', inplace=True)
+    vix = vix.resample(freq).mean()
+    vix.columns = vix.columns.get_level_values(0)
+    vix = vix[str(start_year):str(end_year)+end_str]   
+    vix['vix'] = normalize(vix['vix'])
+    
+    df_dict[freq] = df_dict[freq][str(start_year):str(end_year)+end_str]
+    
+    fig, ax = plt.subplots(figsize=(14,6))
+    ax.plot(df_dict[freq].index, df_dict[freq].bloom_norm, label='Børsen Uncertainty Index')
+    if plot_vix:
+        ax.plot(vix.index, vix.vix, label='VIX')
+    ax.legend(frameon=False, loc='upper left')    
+
+    ax.xaxis.set_major_locator(years)
+    ax.xaxis.set_major_formatter(years_fmt)
+    ax.xaxis.set_minor_locator(months)
+    
+    corr = _calc_corr(vix,df_dict[freq])
+    ax.text(0.77, 0.95, 'Correlation: %.2f , frequency = %s' % (round(corr,2), freq) , transform=ax.transAxes)
+    
+    plt.show()
+    fig.savefig(f'{out_path}\\plot_{freq}.png', dpi=300)
+    return corr, fig, ax
+
+def _calc_corr(df1,df2):
+    df1 = df1.join(df2, how='inner')
+    corr_mat = pd.np.corrcoef(df1.vix.values.flatten(), df1.bloom_norm.values.flatten())
+    return corr_mat[0,1]
 
 def define_NB_colors():
     """
@@ -215,6 +192,9 @@ def define_NB_colors():
         ])
     plt.rcParams["axes.prop_cycle"] = c
     return c
+
+def normalize(series):
+    return (series-series.mean())/series.std()
 
 def _stemtext(text):
     # Remove any non-alphabetic character, split by space

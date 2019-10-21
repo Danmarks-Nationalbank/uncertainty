@@ -5,8 +5,9 @@ import pandas as pd
 import pickle
 import re
 import warnings
-
-from fui.utils import dump_pickle
+import glob
+import html
+from src.fui.utils import dump_pickle
 
 def parse_raw_data(params, nrows=None):
     """
@@ -15,7 +16,7 @@ def parse_raw_data(params, nrows=None):
     """
     # Load the data
     csvpath = \
-        params['paths']['boersen_articles']+params['filenames']['boersen_csv']
+        params['paths']['root']+params['paths']['boersen_articles']+params['filenames']['boersen_csv']
     df = pd.read_csv(csvpath, sep=';', encoding='UTF-16', error_bad_lines=False, nrows=nrows)
     
     print('Dropping articles with NaN content...')
@@ -33,7 +34,31 @@ def parse_raw_data(params, nrows=None):
     print('Dropped {} articles with ID as SectionName'.format(start_n-end_n))
     
     #drop some suppliers
+    start_n = df.shape[0] 
     df = df[df['Supplier'].isin(['Blog', 'Ritzau', 'Børsen', 'E-Avis', 'ePaper', 'Borsen'])]
+    end_n = df.shape[0]
+    print('Dropped {} articles with bad suppliers'.format(start_n-end_n))
+    
+    #drop irrelevant section names
+    start_n = df.shape[0] 
+    df = df[~df['SectionName'].isin(['Bagsiden','Hvad kan vi danskere','Pleasure',
+                                     'Weekend Diverse','Bilen','Weekend Kultur',
+                                     'Bagside','Underholdning','Weekend Livsstil',
+                                     'Sponsoreret','Unknown Section Name','Kriminal',
+                                     'Portræt','Gadget','Magasin Pleasure','Gourmet',
+                                     'Rejser','Weekend Mode','Week-rejser','Weekend Golf',
+                                     'Week-mad', 'Week-motor', 'Biler', 'Kultur', 'Sport',
+                                     'Week-livsstil', 'Weekend Mad', 'Pleasure', 'Design',
+                                     'Motion', 'Week-golf', 'Week-mode','Roskilde festival',
+                                     'Magasin Pleasure EM', 'Weekend Outdoor', 'Magasin Pleasure Portræt',
+                                     'Magasin Pleasure Ure', 'Magasin Pleasure Design',
+                                     'Magasin Pleasure Interiør', 'Magasin Pleasure kunst & kultur',
+                                     'Magasin Pleasure 2. sektion Rejser', 'Magasin Pleasure Firmabilen 2015',
+                                     'Magasin Pleasure rejser', 'Magasin Pleasure 2. sektion Rejser Hoteller Stil',
+                                     'Weekend Livstil','Digital Gadget','Magasin Business Firmabilen'])]
+    end_n = df.shape[0]
+    print('Dropped {} articles with irrelevant section names'.format(start_n-end_n))
+
     
     #drop unneccessary columns
     df.drop(labels=[
@@ -56,6 +81,7 @@ def parse_raw_data(params, nrows=None):
         df_year = df.loc[df['Year'] == year]
         df_year['ArticleContents'] = __clean_text(df_year['ArticleContents'])
         df_year['word_count'] = df_year['ArticleContents'].str.count(' ') + 1
+        df_year = df_year[df_year.word_count >= 100] 
         print('Columns: ', df_year.columns)
         dump_pickle(params['paths']['root']+params['paths']['parsed_news'],params['filenames']['parsed_news']+'_'+str(year)+'.pkl',df_year)
 
@@ -83,4 +109,22 @@ def __clean_text(series):
 
     # Step 5: Convert to lowercase
     series = series.str.lower()
+    
+    # Step 6: Unescape any html entities
+    print('Step 6: Unescape html')
+    series = series.apply(html.unescape)
+    
     return series
+
+def load_parsed_data(params, sample_size=None):
+    filelist = glob.glob(params['paths']['root']+
+                         params['paths']['parsed_news']+'boersen*.pkl') 
+    df = pd.DataFrame()
+    for f in filelist:    
+        with open(f, 'rb') as f_in:
+            df_n = pickle.load(f_in)
+            df = df.append(df_n)
+    if sample_size is not None:
+        return df.sample(sample_size)
+    else:
+        return df

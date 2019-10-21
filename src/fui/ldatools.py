@@ -35,12 +35,12 @@ def preprocess(text, lemmatizer, stopfile='data/stopwords.txt'):
     - remove words with a length < threshold
     - lemmatize
     """
-    text = gensim.utils.simple_preprocess(text, deacc=True)
+    text = gensim.utils.simple_preprocess(text, deacc=True, max_len=25)
     list_to_stem = __remove_stopwords(text, stopfile)
+        
+    lemmed_list = [lemmatizer.lemmatize("", word)[0] for word in list_to_stem]
+    text = [word for word in lemmed_list if len(word) >= 3]
     
-    text = [word for word in list_to_stem if len(word) >= 3]
-    
-    lemmed_list = [lemmatizer.lemmatize("", word)[0] for word in text]
     return ' '.join([word for word in lemmed_list])
 
 def optimize_topics(lda_instance, topics_to_optimize, plot=True, plot_title=""):
@@ -57,13 +57,13 @@ def optimize_topics(lda_instance, topics_to_optimize, plot=True, plot_title=""):
                                                  passes=1, per_word_topics=False,
                                                  # alpha=50/num_topics,
                                                  # eta=0.005,
-                                                 workers=10)
+                                                 workers=15)
 
         coherence_model_n = gensim.models.CoherenceModel(model=lda_model_n,
                                                          texts=(articles for articles in lda_instance),
                                                          dictionary=lda_instance.dictionary,
                                                          coherence='c_v',
-                                                         processes=10)
+                                                         processes=15)
         lda_models.append(lda_model_n)
         coherence_scores.append(coherence_model_n.get_coherence())
 
@@ -94,14 +94,18 @@ def create_dictionary(lda_instance, params, unwanted_words=None, keep_words=None
         
     # Create dictionary (id2word)
     file_path = os.path.join(params['paths']['lda'], params['filenames']['lda_dictionary'])
+    
+    # Load bigram phraser
+    if not hasattr(lda_instance, 'bigram_phraser'):
+        lda_instance.load_bigrams()
+            
+    
     try:
         lda_instance.dictionary = gensim.corpora.Dictionary.load(file_path)
         print("Loaded pre-existing dictionary")
     except FileNotFoundError:
         print("Dictionary not found, creating from scratch")
-        if not hasattr(lda_instance, 'bigram_phraser'):
-            lda_instance.load_bigrams()
-        
+
         lda_instance.dictionary = gensim.corpora.Dictionary(articles for articles in lda_instance)
 
         lda_instance.dictionary.filter_extremes(no_below=params['options']['lda']['no_below'],
@@ -169,7 +173,7 @@ def save_models(lda_instance, params):
 
 def load_model(lda_instance, num_topics, params):
     try:
-        folder_path = os.path.join(params['paths']['lda'], 'lda_model_' + str(num_topics))
+        folder_path = os.path.join(params['paths']['root'],params['paths']['lda'], 'lda_model_' + str(num_topics))
         file_path = os.path.join(folder_path, 'trained_lda')
         lda_instance.lda_models = gensim.models.LdaMulticore.load(file_path)
         print("LDA-model with {} topics loaded".format(num_topics))
@@ -177,55 +181,84 @@ def load_model(lda_instance, num_topics, params):
         print("Error: LDA-model not found")
         lda_instance.lda_models = None
         
-def load_models(lda_instance, topics, params, plot=True):
+def load_models(lda_instance, topics, params, plot=False):
     lda_models = []
     coherence_scores = []
     file_list = []
     for t in topics: 
-        file_list.append(os.path.join(params['paths']['lda'], 'lda_model_' 
-                                      + str(t)+ '\\trained_lda'))
+        print(t)
+        file_list.append(os.path.join(params['paths']['root'],params['paths']['lda'], 'lda_model_'+str(t)+'\\trained_lda'))
 
 
     for f in file_list:
+        print(f)
         try:
             lda_model_n = gensim.models.LdaMulticore.load(f)
-            print(f"LDA-model at {f} loaded, getting coherence score")
-            coherence_model_n = gensim.models.CoherenceModel(model=lda_model_n,
-                                                         texts=(articles for articles in lda_instance),
-                                                         dictionary=lda_instance.dictionary,
-                                                         coherence='c_v',
-                                                         processes=10)
-            
+#            print(f"LDA-model at {f} loaded, getting coherence score")
+#            coherence_model_n = gensim.models.CoherenceModel(model=lda_model_n,
+#                                                         texts=(articles for articles in lda_instance),
+#                                                         dictionary=lda_instance.dictionary,
+#                                                         coherence='c_v',
+#                                                         processes=10)
+    
             lda_models.append(lda_model_n)
-            cv = coherence_model_n.get_coherence()
-            coherence_scores.append(cv)
-            print("LDA at %s topics has a coherence-score %8.2f" % (f, cv))
+#            cv = coherence_model_n.get_coherence()
+#            coherence_scores.append(cv)
+#            print("LDA at %s topics has a coherence-score %8.2f" % (f, cv))
 
         except FileNotFoundError:
             print(f"Error: LDA-model at {f} not found")
     
-    with open('coherence.csv', 'w', newline='') as csvout:
-        wr = csv.writer(csvout, delimiter=',')
-        for cv, n in zip(coherence_scores, topics):
-            wr.writerow([n,cv])
+#    with open('coherence.csv', 'w', newline='') as csvout:
+#        wr = csv.writer(csvout, delimiter=',')
+#        for cv, n in zip(coherence_scores, topics):
+#            wr.writerow([n,cv])
+#    
+#    if plot:
+#        plt.plot(topics, coherence_scores)
+#        plt.xlabel('Number of topics')
+#        plt.ylabel('Coherence score')
+#        #plot_title += str(lda_instance.params.lda['tf-idf'])
+#        #plt.title(plot_title)
+#        plt.show()
+
+    lda_instance.lda_models = lda_models
+#, coherence_scores
     
-    if plot:
-        plt.plot(topics, coherence_scores)
-        plt.xlabel('Number of topics')
-        plt.ylabel('Coherence score')
-        #plot_title += str(lda_instance.params.lda['tf-idf'])
-        #plt.title(plot_title)
-        plt.show()
+def docs2bow(params, sample_size=2000):
+    file_path = os.path.join(params['paths']['lda'], 'corpus.mm')
+    mm = gensim.corpora.mmcorpus.MmCorpus(file_path)  # `mm` document stream now has random access
+    if sample_size is not None:
+        sample = [random.randint(0,mm.num_docs) for i in range(sample_size)]
+        corpus_bow = []
+        for doc in sample:
+            corpus_bow.append(mm[doc])
+    else:
+        corpus_bow = []
+        for doc in range(0,mm.num_docs,1):
+            corpus_bow.append(mm[doc])
+    word_ids = [item for sublist in corpus_bow for item in sublist]
+    df = pd.DataFrame(word_ids, columns=['word','count'], dtype='int')
+    df = df.groupby(['word'])['count'].sum().reset_index()
+    bow = [tuple(x) for x in df.values]
+    return bow
 
-    return lda_models, coherence_scores
+def get_perplexity(lda_model, params, chunksize=2000):
+    file_path = os.path.join(params['paths']['lda'], 'corpus.mm')
+    mm = gensim.corpora.mmcorpus.MmCorpus(file_path)  # `mm` document stream now has random access
+    sample = [random.randint(0,mm.num_docs) for i in range(chunksize)]
+    test_corpus = []
+    for doc in sample:
+        test_corpus.append(mm[doc])
+    perplexity = np.exp2(-lda_model.log_perplexity(test_corpus,mm.num_docs))
+    return perplexity, test_corpus
 
-def _get_scaled_significance(lda_instance, params, n_words=200):
+def _get_scaled_significance(lda_model, params, n_words=200):
     _cols = ['token_id', 'weight', 'topic']
     df = pd.DataFrame(data=None, columns=_cols)
-    num_topics = lda_instance.lda_models.num_topics
-    
+    num_topics = lda_model.num_topics
     for i in range(0,num_topics,1):
-        _list = lda_instance.lda_models.get_topic_terms(i,200)
+        _list = lda_model.get_topic_terms(i,n_words)
         df_n = pd.DataFrame(_list, columns=_cols[0:2])
         df_n['topic'] = i
         df = df.append(df_n)
@@ -236,21 +269,21 @@ def _get_scaled_significance(lda_instance, params, n_words=200):
     df.sort_values(['topic','scaled_weight'],inplace=True,ascending=False)
     return df['scaled_weight']
 
-def get_top_words(lda_instance, params, topn=10):
-    df = _get_scaled_significance(lda_instance, params, 200)
+def get_top_words(lda_model, lda_instance, params, topn=10):
     df_out = pd.DataFrame(data=None, columns=['scaled_weight','word'])
-    print(df_out.index)
-    num_topics = lda_instance.lda_models.num_topics
-    for i in range(0,num_topics,1):
+
+    df = _get_scaled_significance(lda_model, params, 20)
+    for i in range(0,lda_model.num_topics,1):
         tokens = []
         df_topic = df[df.index.get_level_values('topic') == i]
         df_topic = df_topic[0:topn]
         for t in range(0,topn,1):
             tokens.append(lda_instance.dictionary[df_topic.index.values[t][0]])
         tokens = pd.DataFrame(tokens, index=df_topic.index, columns=['word'])
-        df_topic = pd.concat([df_topic,tokens], axis=1)
         print(tokens)
-        print(df_topic)
+        df_topic = pd.concat([df_topic,tokens], axis=1, sort=True)
+        #print(tokens)
+        #print(df_topic)
         df_out = df_out.append(df_topic)
     return df_out
 

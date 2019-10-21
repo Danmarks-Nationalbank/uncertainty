@@ -10,16 +10,18 @@ import pickle
 import random
 import warnings
 import json
+import lemmy
 
 from src.fui.ldatools import preprocess
 from src.fui.utils import timestamp
+
 from collections import Counter
 from datetime import timedelta, datetime
 from functools import partial
 from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 from multiprocessing import Pool
-from wordcloud import WordCloud
+#from wordcloud import WordCloud
 from nltk.stem.snowball import SnowballStemmer
 
 
@@ -33,7 +35,6 @@ class LDA:
         self.files_list = files_list
         self.params = params
         self.lemmatizer = lemmatizer
-        self.load_bigrams = load_bigrams
                 
         if self.params['options']['lda']['log']:
             import logging
