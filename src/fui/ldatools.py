@@ -245,7 +245,7 @@ def docs2bow(params, sample_size=2000):
 
 def corpus2bow(lda_instance, params):
     """
-    returns corpus in a bag of words dict, key is word_id from dictionary, value is word count in corpus.
+    returns corpus in a bag of words list of (word_id,word_count)
     """
     bow_dict = {k: 0 for (k,v) in lda_instance.dictionary.id2token.items()}
     file_path = os.path.join(params['paths']['lda'], 'corpus.mm')
@@ -254,7 +254,8 @@ def corpus2bow(lda_instance, params):
         doc_dict = dict(mm[doc])
         for k, v in doc_dict.items():
             bow_dict[k] = bow_dict[k] + v
-    return bow_dict
+    bow_list = [(k, v) for k, v in bow_dict.items()] 
+    return bow_list
 
 def get_perplexity(lda_model, params, chunksize=2000):
     file_path = os.path.join(params['paths']['lda'], 'corpus.mm')
