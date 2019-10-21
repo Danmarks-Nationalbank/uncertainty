@@ -243,6 +243,21 @@ def docs2bow(params, sample_size=2000):
     bow = [tuple(x) for x in df.values]
     return bow
 
+def corpus2bow(lda_instance, params):
+    """
+    returns corpus in a bag of words dict, key is word_id from dictionary, value is word count in corpus.
+    """
+    bow_dict = lda_instance.dictionary.id2token
+    for k, v in bow_dict.items():
+        bow_dict[k] = 0
+    file_path = os.path.join(params['paths']['lda'], 'corpus.mm')
+    mm = gensim.corpora.mmcorpus.MmCorpus(file_path)  # `mm` document stream now has random access
+    for doc in range(0,mm.num_docs,1):
+        doc_dict = dict(mm[doc])
+        for k, v in doc_dict.items():
+            bow_dict[k] = bow_dict[k] + v
+    return bow_dict
+
 def get_perplexity(lda_model, params, chunksize=2000):
     file_path = os.path.join(params['paths']['lda'], 'corpus.mm')
     mm = gensim.corpora.mmcorpus.MmCorpus(file_path)  # `mm` document stream now has random access
