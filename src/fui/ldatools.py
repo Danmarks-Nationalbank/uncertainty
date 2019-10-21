@@ -247,9 +247,7 @@ def corpus2bow(lda_instance, params):
     """
     returns corpus in a bag of words dict, key is word_id from dictionary, value is word count in corpus.
     """
-    bow_dict = lda_instance.dictionary.id2token
-    for k, v in bow_dict.items():
-        bow_dict[k] = 0
+    bow_dict = {k: 0 for (k,v) in lda_instance.dictionary.id2token.items()}
     file_path = os.path.join(params['paths']['lda'], 'corpus.mm')
     mm = gensim.corpora.mmcorpus.MmCorpus(file_path)  # `mm` document stream now has random access
     for doc in range(0,mm.num_docs,1):
