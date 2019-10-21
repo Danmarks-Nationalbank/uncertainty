@@ -6,6 +6,7 @@ import pandas as pd
 import pickle
 import random
 import csv
+import copy
 
 from collections import Counter
 from functools import partial
@@ -247,7 +248,8 @@ def corpus2bow(lda_instance, params):
     """
     returns corpus in a bag of words list of (word_id,word_count)
     """
-    bow_dict = {k: 0 for (k,v) in lda_instance.dictionary.id2token.items()}
+    bow_dict = copy.deepcopy(lda_instance.dictionary.id2token)
+    bow_dict = {k: 0 for (k,v) in bow_dict}
     file_path = os.path.join(params['paths']['lda'], 'corpus.mm')
     mm = gensim.corpora.mmcorpus.MmCorpus(file_path)  # `mm` document stream now has random access
     for doc in range(0,mm.num_docs,1):
