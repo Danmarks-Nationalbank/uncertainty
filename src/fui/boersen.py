@@ -67,7 +67,7 @@ def stemtext(text):
 def define_bloom_sets():
     bloom_E = set(['erhverv', 'forretning', 'handel', 'økonomi', 'økonomisk'])
     bloom_P = set(['politik', 'regulering', 'skat', 'udgift', 'underskud', 'nationalbank', 'folketing', 'regering'])
-    bloom_U = set(['usik', 'usikker'])
+    bloom_U = set(['usik', 'usikker','uvished','mistro','betænkeligheder'])
     return bloom_E, bloom_P, bloom_U
 
 def bloom_measure(text, bloomtuple=None):
@@ -77,7 +77,7 @@ def bloom_measure(text, bloomtuple=None):
         bloom_E, bloom_P, bloom_U = bloomtuple
     stem_set = stemtext(text)
 
-    return bool(bloom_E & stem_set) & bool(bloom_P & stem_set) & bool(bloom_U & stem_set)
+    return bool(bloom_E & stem_set) or bool(bloom_P & stem_set) & bool(bloom_U & stem_set)
 
 def process_text(series):
     with Pool() as pool:

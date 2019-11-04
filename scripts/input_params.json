@@ -1,4 +1,4 @@
-{
+﻿{
 	"paths": {
 		"root" : "C:\\projects\\FUI\\",
         "enriched_text": "data\\intermediate\\enriched_news\\",
@@ -28,9 +28,17 @@
 		"political": ["politik", "regulering", "skat", "udgift", "underskud", "nationalbank", "folketing", "regering", "ECB", "Washington", "EU", "Bruxelles", "Bryssel"],
 		"uncertainty": ["usik", "usikker", "uvis", "mistro"]
 	},
+	"uncertainty": {
+		"uncertainty": ["usik", "usikker", "uvis", "mistro"]
+	},
 	"bloom_extended_unstem": {
 		"economic": ["erhverv", "forretning", "handel", "økonomi", "økonomisk"],
 		"political": ["politik", "regulering", "skat", "udgift", "underskud", "nationalbanken", "folketinget", "regeringen", "ECB", "Washington", "EU", "Bruxelles", "Bryssel"],
+		"uncertainty": ["usikkerhed", "usikker", "uvis", "mistro"]
+	},
+	"topics20": {
+		"economic": [1,3,6,8],
+		"political": [2,5,16],
 		"uncertainty": ["usikkerhed", "usikker", "uvis", "mistro"]
 	},
 	"options": {
@@ -45,12 +53,12 @@
 			"features": ["LM_negative", "LM_positive", "VD_neg", "VD_pos", "VD_compound", "PC_negative", "PC_difference"],
 			"log": 1,
 			"keep_n": 100000,
-			"no_above": 0.7,
-			"no_below": 50,
+			"no_above": 0.50,
+			"no_below": 100,
 			"only_events": 0,
 			"test_size": 10000,
 			"tf-idf": 0
 		},
-    "threads": 3
+    "threads": 10
     }
 }

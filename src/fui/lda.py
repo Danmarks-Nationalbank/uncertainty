@@ -26,7 +26,7 @@ from nltk.stem.snowball import SnowballStemmer
 
 
 class LDA:
-    def __init__(self, files_list, params, lemmatizer, test=False):
+    def __init__(self, files_list, params, lemmatizer, test_share=0.05, test=False):
         self.dictionary = None
         self.articles = []
         self.article_id = []
@@ -35,12 +35,18 @@ class LDA:
         self.files_list = files_list
         self.params = params
         self.lemmatizer = lemmatizer
+        self.test_share = test_share
                 
         if self.params['options']['lda']['log']:
             import logging
+            try:
+                os.remove(self.params['paths']['lda']+'lda_log.txt')
+            except (FileNotFoundError, PermissionError) as e:
+                pass
             logging.basicConfig(filename=self.params['paths']['lda']+'lda_log.txt',
                                 format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
-
+            logger = logging.getLogger(__name__)
+            logger.setLevel(logging.DEBUG)
             warnings.filterwarnings('ignore', category=DeprecationWarning)
 
     def __iter__(self):
@@ -55,7 +61,7 @@ class LDA:
 
                 try:
                     self.articles.extend(list(df['ArticleContents'].values))
-                    self.article_id.extend(list(df['ID'].values))
+                    self.article_id.extend(list(df['ID2'].values))
                 except KeyError:
                     print("Skipped {}, file doesn't contain any body-text".format(f))
 
@@ -109,13 +115,12 @@ class LDA:
             with h5py.File(os.path.join(self.params['paths']['lda'], self.params['filenames']['lda_cleaned_text']), 'r') as hf:
                 hf = hf['parsed_strings'][:]
                 articles_to_phrasing  = [a[1].split() for a in hf]
-            phrases = gensim.models.phrases.Phrases(articles_to_phrasing, self.params['options']['lda']['no_below'])
+            phrases = gensim.models.phrases.Phrases(articles_to_phrasing, self.params['options']['lda']['no_below'], threshold=100)
             phrases.save(os.path.join(self.params['paths']['lda'],'phrases.pkl'), separately=None, sep_limit=10485760, ignore=frozenset([]), pickle_protocol=2)
             self.bigram_phraser = gensim.models.phrases.Phraser(phrases)
             print("Bigram phraser loaded")
         
-    @staticmethod
-    def get_topics(lda_model, dictionary, text):
-        bow = dictionary.doc2bow(text.split())
+    def get_topics(self, lda_model, dictionary, text):
+        bow = dictionary.doc2bow(self.bigram_phraser[text.split()])
         return lda_model.get_document_topics(bow, minimum_probability=0.0)
 

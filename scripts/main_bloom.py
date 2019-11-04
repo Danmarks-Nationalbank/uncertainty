@@ -9,6 +9,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import pickle
 import glob 
+import codecs
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
@@ -23,26 +24,26 @@ if __name__ == "__main__":
     #Step 0: Parse input parameter file
     print(os.getcwd())
     PARAMS_PATH = 'input_params.json'
-    with open(PARAMS_PATH, encoding='utf8') as json_params:
-        params = json.load(json_params)
+    with codecs.open(PARAMS_PATH, 'r', 'utf-8-sig') as json_file:  
+        params = json.load(json_file)
     
     #Step 1: Import Børsen articles
     #parse_raw_data(params, nrows=None)
     
-    #Step 2: Extend Bloom dict using pre-trained embeddings
-#    params['bloom_extended_w2v'] = extend_dict_w2v('bloom_extended', params, n_words=10)            
-    
-    #Step 3: Get Bloom binary measure for each article using eval conditions in input_params
-#    for logic in ['EandPandU','EandU','EorPandU','PandU','U']:
+#    #Step 2: Extend Bloom dict using pre-trained embeddings
+     params['bloom_extended_w2v'] = extend_dict_w2v('bloom_extended', params, n_words=10)            
+#    
+#    #Step 3: Get Bloom binary measure for each article using eval conditions in input_params
+#    for logic in ['EandPandU','EandU','EorPandU','PandU']:
 #        bloom_measure(params,dict_name='bloom_extended_w2v',logic=logic,start_year=2000, end_year=2019)
     
     #Step 4: Aggregate, write csv and plot
-    for logic in ['EandPandU','EandU','EorPandU','PandU','U']:
+    for logic in ['EandPandU','EandU','EorPandU']:
         bloom_path = params['paths']['root']+params['paths']['bloom']+'bloom_extended_w2v'+'\\'+logic
         bloom_agg = bloom_aggregate(bloom_path, params, aggregation=['M','Q','D'])
         
         corr, fig, ax = plot_index(bloom_path, bloom_agg, params, plot_vix=True, 
-                                   freq='M', start_year=2005, end_year=2019)
+                                   freq='M', start_year=2000, end_year=2019)
         print('Logic: '+logic+', Corr: '+"%.2f" % round(corr,3))
         
         

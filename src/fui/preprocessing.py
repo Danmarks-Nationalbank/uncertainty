@@ -59,6 +59,11 @@ def parse_raw_data(params, nrows=None):
     end_n = df.shape[0]
     print('Dropped {} articles with irrelevant section names'.format(start_n-end_n))
 
+    start_n = df.shape[0]
+    df = df[df['ShowOnWebSite'].apply(type) == str]
+    df = df[df['ShowOnWebSite'] == 'Yes']
+    end_n = df.shape[0]
+    print('Dropped {} articles not shown on website'.format(start_n-end_n))
     
     #drop unneccessary columns
     df.drop(labels=[
@@ -81,7 +86,7 @@ def parse_raw_data(params, nrows=None):
         df_year = df.loc[df['Year'] == year]
         df_year['ArticleContents'] = __clean_text(df_year['ArticleContents'])
         df_year['word_count'] = df_year['ArticleContents'].str.count(' ') + 1
-        df_year = df_year[df_year.word_count >= 100] 
+        df_year = df_year[df_year.word_count >= 50] 
         print('Columns: ', df_year.columns)
         dump_pickle(params['paths']['root']+params['paths']['parsed_news'],params['filenames']['parsed_news']+'_'+str(year)+'.pkl',df_year)
 
@@ -92,12 +97,14 @@ def __clean_text(series):
     # Step 1: Remove html tags
     print('Step 1: Removing tags')
     series = series.str.replace(r'<[^>]*>','',regex=True)
-    
+    series = series.str.replace(r'https?:\/\/\S*','',regex=True)
+    series = series.str.replace(r'www.\S*','',regex=True)
+        
     # Step 2: Remove everything following these patterns (bylines)     
     print('Step 2: Removing bylines')
     pattern = "|".join(
         [r'\/ritzau/AFP', r'Nyhedsbureauet Direkt', r'\w*\@borsen.dk\b', r'\/ritzau/', r'\/ritzau/FINANS'])
-    series = series.str.split(pattern, n=1).str[0]
+    series = series.str.replace(pattern,'',regex=True)
 
     # Step 3: Remove \n, \t
     print('Step 3: Removing other')
@@ -105,7 +112,7 @@ def __clean_text(series):
     series = series.str.replace(r'\t', ' ')
 
     # Step 4: Remove additional whitespaces
-    series = series.str.split().str.join(' ')
+    #series = series.str.split().str.join(' ')
 
     # Step 5: Convert to lowercase
     series = series.str.lower()
@@ -113,6 +120,12 @@ def __clean_text(series):
     # Step 6: Unescape any html entities
     print('Step 6: Unescape html')
     series = series.apply(html.unescape)
+    
+    # Manually remove some html
+    series = series.str.replace(r'&rsquo', '')
+    series = series.str.replace(r'&ldquo', '')
+    series = series.str.replace(r'&rdquo', '')
+    series = series.str.replace(r'&ndash', '')
     
     return series
 

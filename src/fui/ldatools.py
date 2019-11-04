@@ -1,4 +1,5 @@
 import gensim
+#from gensim.models.callbacks import CoherenceMetric, PerplexityMetric, ConvergenceMetric
 import h5py
 import numpy as np
 import os
@@ -8,14 +9,16 @@ import random
 import csv
 import copy
 
+
+from itertools import cycle, islice
 from collections import Counter
 from functools import partial
 from matplotlib import pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap
+from matplotlib import colors
 from multiprocessing import Pool
 #from wordcloud import WordCloud
-from nltk.stem.snowball import SnowballStemmer
 import lemmy
+from langdetect import detect
 
 from src.fui.utils import timestamp
 
@@ -36,29 +39,80 @@ def preprocess(text, lemmatizer, stopfile='data/stopwords.txt'):
     - remove words with a length < threshold
     - lemmatize
     """
-    text = gensim.utils.simple_preprocess(text, deacc=True, max_len=25)
+    error=['år','bankernes','bankerne', 'dst','priser','bankers']
+    drop=['bre','nam','ritzau','st','le','sin','år','stor','me','når','se','dag','en','to','tre','fire','fem','seks','syv','otte','ni','ti']
+    if detect(text) == 'en':
+        return ''
+    
+    text = gensim.utils.simple_preprocess(text, deacc=False, max_len=25)
     list_to_stem = __remove_stopwords(text, stopfile)
         
-    lemmed_list = [lemmatizer.lemmatize("", word)[0] for word in list_to_stem]
-    text = [word for word in lemmed_list if len(word) >= 3]
+    lemmed_list = [lemmatizer.lemmatize("", word)[0] for word in list_to_stem if not word in error]
+    tokens = [word for word in lemmed_list if len(word) >= 2]
     
-    return ' '.join([word for word in lemmed_list])
+    tokens = [w for w in tokens if not w in drop]
+    tokens = [w.replace("bankernes","bank") for w in tokens ]
+    tokens = [w.replace("bankers","bank") for w in tokens ]
+    tokens = [w.replace("kris","krise") for w in tokens ]
+    tokens = [w.replace("bile","bil") for w in tokens ]
+    tokens = [w.replace("bankerne","bank") for w in tokens ]
+    tokens = [w.replace("priser","pris") for w in tokens ]
+    tokens=[w for w in tokens if not w.isdigit()]
+    
+    return ' '.join([word for word in tokens])
 
-def optimize_topics(lda_instance, topics_to_optimize, plot=True, plot_title=""):
+def print_topics(lda_model, params, topn=30):
+#    topics = lda_model.get_topics()
+#    y = pdist(topics, metric='jensenshannon')
+#    Z = hac.linkage(y, method='ward')
+#    clusters = hac.fcluster(Z, t=0.8, criterion='distance')
+    
+    csv_path = os.path.join(params['paths']['root']+params['paths']['lda'], 
+                            'topic_words'+str(lda_model.num_topics)+'.csv') 
+    word_lists = []
+    for t in range(lda_model.num_topics):
+        word_list = lda_model.show_topic(t,topn)
+        if not len(word_lists):
+            word_list = [[w[0]] for w in word_list]
+            word_lists = word_list
+        else:
+            word_list = [w[0] for w in word_list]
+            for i in range(topn):
+                word_lists[i].append(word_list[i])
+                
+    header = ['topic_'+str(x) for x in range(lda_model.num_topics)]
+#    header2 = ['cluster_'+str(x) for x in list(clusters)]
+    with open(csv_path, mode='w', newline='\n', encoding='utf-8-sig') as csv_out:
+        csvwriter = csv.writer(csv_out, delimiter=',')
+        csvwriter.writerow(header)
+#        csvwriter.writerow(header2)
+        for i in range(topn):
+            csvwriter.writerow(word_lists[i])
+               
+    
+
+def optimize_topics(lda_instance, topics_to_optimize, plot=False, plot_title=""):
     coherence_scores = []
     lda_models = []
+    
+#    pl_holdout = PerplexityMetric(corpus=lda_instance.TestCorpus, logger="shell", title="Perplexity (hold_out)")
+#    ch_umass = CoherenceMetric(corpus=lda_instance.TrainCorpus, coherence="u_mass", logger="shell", title="Coherence (u_mass)")
+#    convergence_jc = ConvergenceMetric(distance="jaccard", logger="shell", title="Convergence (jaccard)")
+#    
+#    callbacks = [pl_holdout, ch_umass, convergence_jc]
 
     print("Finding coherence-scores for the list {}:".format(topics_to_optimize))
     for num_topics in topics_to_optimize:
         print("\t{} topics... {}".format(num_topics, timestamp()))
 
-        lda_model_n = gensim.models.LdaMulticore(corpus=lda_instance.SerializedCorpus,
+        lda_model_n = gensim.models.LdaMulticore(corpus=lda_instance.TrainCorpus,
                                                  num_topics=num_topics,
                                                  id2word=lda_instance.dictionary,
-                                                 passes=1, per_word_topics=False,
-                                                 # alpha=50/num_topics,
-                                                 # eta=0.005,
-                                                 workers=15)
+                                                 passes=20, per_word_topics=False,
+                                                 alpha='asymmetric',
+                                                 eval_every=10,
+                                                 minimum_probability=0.0,
+                                                 chunksize=10000, workers=15)
 
         coherence_model_n = gensim.models.CoherenceModel(model=lda_model_n,
                                                          texts=(articles for articles in lda_instance),
@@ -86,8 +140,7 @@ def optimize_topics(lda_instance, topics_to_optimize, plot=True, plot_title=""):
 
     return lda_models, coherence_scores
 
-
-def create_dictionary(lda_instance, params, unwanted_words=None, keep_words=None):
+def create_dictionary(lda_instance, params, load_bigrams=True, unwanted_words=None, keep_words=None):
     
     # Clean and write texts to HDF
     if not lda_instance.load_processed_text():
@@ -97,10 +150,9 @@ def create_dictionary(lda_instance, params, unwanted_words=None, keep_words=None
     file_path = os.path.join(params['paths']['lda'], params['filenames']['lda_dictionary'])
     
     # Load bigram phraser
-    if not hasattr(lda_instance, 'bigram_phraser'):
+    if load_bigrams:
         lda_instance.load_bigrams()
             
-    
     try:
         lda_instance.dictionary = gensim.corpora.Dictionary.load(file_path)
         print("Loaded pre-existing dictionary")
@@ -120,22 +172,32 @@ def create_dictionary(lda_instance, params, unwanted_words=None, keep_words=None
         lda_instance.dictionary.compactify()
         lda_instance.dictionary.save(file_path)
     print("\t{}".format(lda_instance.dictionary))
-
-
+       
 def create_corpus(lda_instance, params):
-
+    
     # Helper-class to create BoW-corpus "lazily"
-    class MyCorpus:
+    class CorpusSplitter:
+        def __init__(self, test_share):
+            self.test_share = test_share
+            self.test_corpus = []
+        
         def __iter__(self):
             for line in lda_instance.articles:
-                yield lda_instance.dictionary.doc2bow(lda_instance.bigram_phraser[line.split()])
+                if random.random() <= self.test_share:
+                    self.test_corpus.append(lda_instance.dictionary.doc2bow(lda_instance.bigram_phraser[line.split()]))
+                    continue
+                else:
+                    yield lda_instance.dictionary.doc2bow(lda_instance.bigram_phraser[line.split()])
 
     # Serialize corpus using either BoW of tf-idf
-    corpus_bow = MyCorpus()
-
+    corpus_bow = CorpusSplitter(lda_instance.test_share)
+    
     file_path = os.path.join(params['paths']['lda'], 'corpus.mm')
+    file_path_test = os.path.join(params['paths']['lda'], 'corpus_test.mm')
     try:
-        lda_instance.SerializedCorpus = gensim.corpora.MmCorpus(file_path)
+        lda_instance.TrainCorpus = gensim.corpora.MmCorpus(file_path)
+        if lda_instance.test_share > 0.0:
+            lda_instance.TestCorpus = gensim.corpora.MmCorpus(file_path_test)
         print("Loaded pre-existing corpus")
     except FileNotFoundError:
         print("Corpus not found, creating from scratch")
@@ -146,14 +208,21 @@ def create_corpus(lda_instance, params):
         if not params['options']['lda']['tf-idf']:
             print("\tSerializing corpus, BoW")
             gensim.corpora.MmCorpus.serialize(file_path, corpus_bow)
+            if lda_instance.test_share > 0.0:
+                gensim.corpora.MmCorpus.serialize(file_path_test, corpus_bow.test_corpus)
         else:
             print("\tSerializing corpus, tf-idf")
             tfidf = gensim.models.TfidfModel(corpus_bow)
-            corpus_tfidf = tfidf[corpus_bow]
-            gensim.corpora.MmCorpus.serialize(file_path, corpus_tfidf)
+            train_corpus_tfidf = tfidf[corpus_bow]
+            gensim.corpora.MmCorpus.serialize(file_path, train_corpus_tfidf)
+            if lda_instance.test_share > 0.0:
+                tfidf = gensim.models.TfidfModel(corpus_bow.test_corpus)
+                test_corpus_tfidf = tfidf[corpus_bow.test_corpus]
+                gensim.corpora.MmCorpus.serialize(file_path_test, test_corpus_tfidf)
 
-        lda_instance.SerializedCorpus = gensim.corpora.MmCorpus(file_path)
-
+        lda_instance.TrainCorpus = gensim.corpora.MmCorpus(file_path)
+        if lda_instance.test_share > 0.0:
+            lda_instance.TestCorpus = gensim.corpora.MmCorpus(file_path_test)
 
 def save_models(lda_instance, params):
 
@@ -176,15 +245,14 @@ def load_model(lda_instance, num_topics, params):
     try:
         folder_path = os.path.join(params['paths']['root'],params['paths']['lda'], 'lda_model_' + str(num_topics))
         file_path = os.path.join(folder_path, 'trained_lda')
-        lda_instance.lda_models = gensim.models.LdaMulticore.load(file_path)
+        lda_instance.lda_model = gensim.models.LdaMulticore.load(file_path)
         print("LDA-model with {} topics loaded".format(num_topics))
     except FileNotFoundError:
         print("Error: LDA-model not found")
-        lda_instance.lda_models = None
+        lda_instance.lda_model = None
         
 def load_models(lda_instance, topics, params, plot=False):
     lda_models = []
-    coherence_scores = []
     file_list = []
     for t in topics: 
         print(t)
@@ -195,36 +263,13 @@ def load_models(lda_instance, topics, params, plot=False):
         print(f)
         try:
             lda_model_n = gensim.models.LdaMulticore.load(f)
-#            print(f"LDA-model at {f} loaded, getting coherence score")
-#            coherence_model_n = gensim.models.CoherenceModel(model=lda_model_n,
-#                                                         texts=(articles for articles in lda_instance),
-#                                                         dictionary=lda_instance.dictionary,
-#                                                         coherence='c_v',
-#                                                         processes=10)
-    
             lda_models.append(lda_model_n)
-#            cv = coherence_model_n.get_coherence()
-#            coherence_scores.append(cv)
-#            print("LDA at %s topics has a coherence-score %8.2f" % (f, cv))
 
         except FileNotFoundError:
             print(f"Error: LDA-model at {f} not found")
-    
-#    with open('coherence.csv', 'w', newline='') as csvout:
-#        wr = csv.writer(csvout, delimiter=',')
-#        for cv, n in zip(coherence_scores, topics):
-#            wr.writerow([n,cv])
-#    
-#    if plot:
-#        plt.plot(topics, coherence_scores)
-#        plt.xlabel('Number of topics')
-#        plt.ylabel('Coherence score')
-#        #plot_title += str(lda_instance.params.lda['tf-idf'])
-#        #plt.title(plot_title)
-#        plt.show()
 
     lda_instance.lda_models = lda_models
-#, coherence_scores
+
     
 def docs2bow(params, sample_size=2000):
     file_path = os.path.join(params['paths']['lda'], 'corpus.mm')
@@ -244,13 +289,14 @@ def docs2bow(params, sample_size=2000):
     bow = [tuple(x) for x in df.values]
     return bow
 
-def corpus2bow(lda_instance, params):
+def corpus2bow(lda_instance,params):
     """
-    returns corpus in a bag of words list of (word_id,word_count)
+    returns test corpus in bow format: list of (word_id,word_count)
     """
+    lda_instance.dictionary[1]
     bow_dict = copy.deepcopy(lda_instance.dictionary.id2token)
-    bow_dict = {k: 0 for (k,v) in bow_dict}
-    file_path = os.path.join(params['paths']['lda'], 'corpus.mm')
+    bow_dict = {k: 0 for (k,v) in bow_dict.items()}
+    file_path = os.path.join(params['paths']['lda'], 'corpus_test.mm')
     mm = gensim.corpora.mmcorpus.MmCorpus(file_path)  # `mm` document stream now has random access
     for doc in range(0,mm.num_docs,1):
         doc_dict = dict(mm[doc])
@@ -259,15 +305,77 @@ def corpus2bow(lda_instance, params):
     bow_list = [(k, v) for k, v in bow_dict.items()] 
     return bow_list
 
-def get_perplexity(lda_model, params, chunksize=2000):
-    file_path = os.path.join(params['paths']['lda'], 'corpus.mm')
-    mm = gensim.corpora.mmcorpus.MmCorpus(file_path)  # `mm` document stream now has random access
+def get_word_proba(bow,lda_instance):
+    """
+    returns probability matrix of same format as lda_model.get_topics() for test corpus,
+    corrects for missing probabilities due to missing words in test corpus by adding zero padding.
+    """
+    test_topics, test_word_topics, test_word_proba = lda_instance.lda_model.get_document_topics(bow, 
+                                                                                                minimum_probability=0.0, 
+                                                                                                minimum_phi_value=0.0, 
+                                                                                                per_word_topics=True)
+    
+    placeholder = [(j,0.0) for j in range(lda_instance.lda_model.num_topics)]
+    for i,t in enumerate(test_word_proba):
+        if t[1] is None:
+            test_word_proba.append((i,placeholder))
+        elif not len(t[1]):
+            #print(test_word_proba[i]) 
+            test_word_proba[i] = (i,placeholder)
+            test_word_proba.sort()
+        elif len(t[1]) is not lda_instance.lda_model.num_topics:
+            #print(test_word_proba[i]) 
+            dict_ = dict(t[1])
+            for j in range(lda_instance.lda_model.num_topics):
+                try:
+                   dict_[j]
+                except KeyError:
+                   dict_[j] = 0.0
+            dict_list = list(dict_.items())
+            dict_list.sort()
+            test_word_proba[i] = (i,dict_list)
+            test_word_proba.sort()
+
+    test_word_proba = [[i[1] for i in g[1]] for g in test_word_proba]
+    #transform to probabilities
+    test_word_proba = np.transpose(np.apply_along_axis(lambda x: x/x.sum(),0,np.array(test_word_proba)))
+    return test_topics, test_word_topics, test_word_proba
+
+def jsd_measure(lda_instance,params):
+    """
+    returns a jensen-shannon distance measure between the empirical 
+    word distribution in a holdout test corpus and the 
+    distribution generated by the trained model.
+    """
+    bow = corpus2bow(lda_instance,params)
+    test_topics, test_word_topics, test_word_proba = get_word_proba(bow,lda_instance)
+    #set missing topics to zero
+    if len(test_topics) is not lda_instance.lda_model.num_topics:
+        topic_dict = dict(test_topics)
+        for j in range(lda_instance.lda_model.num_topics):
+            try:
+               topic_dict[j]
+            except KeyError:
+               topic_dict[j] = 0.0
+        test_topics = list(topic_dict.items())
+    
+    model_pdist = np.transpose([i[1] for i in test_topics]).dot(test_word_proba)
+    bow_ = np.array([i[1] for i in bow])
+    bow_ = bow_ / bow_.sum()
+    bow_pdist = [(i[0][0],i[1]) for i in zip(bow,bow_)]
+    model_pdist = [(i[0][0],i[1]) for i in zip(bow,model_pdist)]
+    jsd = gensim.matutils.jensen_shannon(bow_pdist,model_pdist)
+    return jsd
+    
+def get_perplexity(lda_model, lda_instance, params, chunksize=2000):
+    file_path_test = os.path.join(params['paths']['lda'], 'corpus_test.mm')
+    mm = gensim.corpora.mmcorpus.MmCorpus(file_path_test)  # `mm` document stream now has random access
     sample = [random.randint(0,mm.num_docs) for i in range(chunksize)]
     test_corpus = []
     for doc in sample:
         test_corpus.append(mm[doc])
-    perplexity = np.exp2(-lda_model.log_perplexity(test_corpus,mm.num_docs))
-    return perplexity, test_corpus
+    perplexity = np.exp2(-lda_model.log_perplexity(test_corpus,len(lda_instance.articles)))
+    return perplexity
 
 def _get_scaled_significance(lda_model, params, n_words=200):
     _cols = ['token_id', 'weight', 'topic']
@@ -288,7 +396,7 @@ def _get_scaled_significance(lda_model, params, n_words=200):
 def get_top_words(lda_model, lda_instance, params, topn=10):
     df_out = pd.DataFrame(data=None, columns=['scaled_weight','word'])
 
-    df = _get_scaled_significance(lda_model, params, 20)
+    df = _get_scaled_significance(lda_model, params, topn)
     for i in range(0,lda_model.num_topics,1):
         tokens = []
         df_topic = df[df.index.get_level_values('topic') == i]
@@ -301,29 +409,38 @@ def get_top_words(lda_model, lda_instance, params, topn=10):
         #print(tokens)
         #print(df_topic)
         df_out = df_out.append(df_topic)
+    df_out.index = pd.MultiIndex.from_tuples(df_out.index)
+    df_out = df_out.rename_axis(['token_id','topic'])
+    df_out = df_out.sort_values(by = ['topic', 'scaled_weight'], ascending = [True, False])
+
     return df_out
 
-def merge_documents_and_topics(lda_instance, params):
-
+def merge_documents_and_topics(filelist, lda_instance, params):
+    # Load parsed articles
     print("Merging documents and LDA-topics")
-
-    # Load enriched articles
-    articles = pd.read_csv(os.path.join(params['paths']['enriched_news'],
-                                        params['filenames']['CENSOR_events_enriched_data']),
-                           sep=None, engine='python')
-    articles.rename({'id': 'article_id'}, axis=1, inplace=True)
+    articles = pd.DataFrame()
+    for f in filelist:    
+        with open(f, 'rb') as f_in:
+            df_n = pickle.load(f_in)
+            articles = articles.append(df_n)
+    
+    articles.rename({'ID2': 'article_id'}, axis=1, inplace=True)
     print("\tLoaded {} enriched documents ({} unique)... {}".format(len(articles),
                                                                     len(articles['article_id'].unique()),
                                                                     timestamp()))
 
     # Find LDA-document indices that match the ids of the enriched articles
     enriched_article_id = set(articles['article_id'])
+    
+    # Convert article_id to int
+    lda_instance.article_id = [int(i) for i in lda_instance.article_id]
+    
     lda_indices = [i for (i, j) in enumerate(lda_instance.article_id) if j in enriched_article_id]
     print("\t{} common article-ids... {}".format(len(lda_indices), timestamp()))
 
     # Find document-topics for the document-intersection above
     with Pool(6) as pool:
-        document_topics = pool.map(partial(LDA.get_topics,
+        document_topics = pool.map(partial(lda_instance.get_topics,
                                            lda_instance.lda_model,
                                            lda_instance.dictionary),
                                    [lda_instance.articles[i] for i in lda_indices])
@@ -332,8 +449,7 @@ def merge_documents_and_topics(lda_instance, params):
                            'topics': [[x[1] for x in document_topics[i]] for i in range(len(document_topics))]})
 
     # Merge the enriched data onto LDA-projections
-    df_enriched_lda = pd.merge(df_lda, articles[params['options']['lda']['features'] +
-                                                ['dates', 'own_firm_id', 'article_id']],
+    df_enriched_lda = pd.merge(df_lda, articles['article_id', 'Title', 'ArticleDateCreated'],
                                how='inner',
                                on='article_id')
 
@@ -341,12 +457,12 @@ def merge_documents_and_topics(lda_instance, params):
                                                                                             timestamp()))
 
     # Datetime conversion and weekdate
-    df_enriched_lda['dates'] = pd.to_datetime(df_enriched_lda['dates'])
-    df_enriched_lda['weekdate'] = (
-                df_enriched_lda['dates'] - df_enriched_lda['dates'].dt.weekday * timedelta(days=1)).dt.date
+#    df_enriched_lda['dates'] = pd.to_datetime(df_enriched_lda['dates'])
+#    df_enriched_lda['weekdate'] = (
+#                df_enriched_lda['dates'] - df_enriched_lda['dates'].dt.weekday * timedelta(days=1)).dt.date
 
     # Save enriched documents with their topics
-    folder_path = os.path.join(params['paths']['lda'], 'document_topics')
+    folder_path = os.path.join(params['paths']['root']+params['paths']['lda'], 'document_topics')
     topics_path = os.path.join(folder_path, params['filenames']['lda_merge_doc_topics_file'])
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)

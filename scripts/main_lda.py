@@ -13,22 +13,23 @@ import lemmy
 import json
 import gensim
 import random
-#import pandas as pd
-#import pickle
+import pickle
 import glob
-from src.fui.lda import LDA
-from src.fui.utils import main_directory, dump_pickle, dump_csv
-from src.fui.ldatools import preprocess, optimize_topics, create_dictionary, create_corpus, save_models, load_model, load_models
-from src.fui.ldatools import merge_documents_and_topics, dominating_sentence_per_topic, term_frequency, get_perplexity
-from src.fui.ldatools import get_top_words, _get_scaled_significance, docs2bow
+from matplotlib import pyplot as plt
 
+from src.fui.lda import LDA
+from src.fui.utils import main_directory, dump_pickle, dump_csv, define_NB_colors
+from src.fui.ldatools import preprocess, optimize_topics, create_dictionary, create_corpus, save_models, load_model, load_models
+from src.fui.ldatools import generate_wordclouds, merge_documents_and_topics
+from src.fui.ldatools import get_top_words, jsd_measure, get_perplexity
+from src.fui.ldatools import print_topics, cluster_topics
 from src.fui.preprocessing import parse_raw_data, load_parsed_data
 
 if __name__ == "__main__":
     os.chdir(main_directory())
     PARAMS_PATH = 'scripts/input_params.json'
     NROWS = None
-    topics = [160,120,80,40,20]
+    topics = [65,68,70,72,75,78,80,85,88]
     
 #    with open(PARAMS_PATH, encoding='utf8') as json_params:
 #        params = json.load(json_params)
@@ -41,35 +42,66 @@ if __name__ == "__main__":
                          params['paths']['parsed_news']+'boersen*.pkl') 
 
     lemmatizer = lemmy.load("da")
-    lda_instance = LDA(filelist, params, lemmatizer, test=False)
-    #phrases = add_bigrams(lda_instance,params)
+    lda_instance = LDA(filelist, params, lemmatizer, test_share=0.02)
     
-    create_dictionary(lda_instance, params)
+    create_dictionary(lda_instance, params, load_bigrams=False)
     create_corpus(lda_instance, params)
 
-    lda_instance.lda_models, coherence_scores = optimize_topics(lda_instance, topics, plot=False)
-    save_models(lda_instance, params)
-    #load_models(lda_instance, topics, params)
-    
-     #lda_instance.lda_models[3].show_topic(2,50)
-#    df = get_top_words(lda_instance.lda_models[0], lda_instance, params, topn=10)
+#    lda_instance.lda_models, coherence_scores = optimize_topics(lda_instance, topics, plot=False)
+#    save_models(lda_instance, params)
+##    
+ 
+    load_model(lda_instance, 80, params)
+    topics = lda_instance.lda_model.get_topics()
+    y = pdist(topics, metric='jensenshannon')
+    Z = hac.linkage(y, method='ward')
+    rootnode, nodelist = hac.to_tree(Z,rd=True)
+    children = {}
+    for i in range(79,len(nodelist)):
+        children[i] = [child.id for child in _children(nodelist,i)]
+        
+#    print_topics(lda_instance.lda_model,params)
 #    
-#    for model in models:
-#        num_topics = len(model.print_topics(num_topics=-1, num_words=1))
-#        perp, test_corpus = get_perplexity(model,params,chunksize=1000)
-#        print(f"Model with {num_topics} has perplexity score {perp:.1f}")
+#    #df = get_top_words(lda_instance.lda_model, lda_instance, params, topn=30)
+#    jsd = []
+#    for topic in topics:
+#        load_model(lda_instance,topic,params)
+#        jsd_ = jsd_measure(lda_instance,params)*1000
+#        print(f"Model with {topic} topics has jsd {jsd_:.6f}")
+#        jsd.append(jsd_)
 
-    #df = load_parsed_data(params,1000)
+    #merge_documents_and_topics(filelist, lda_instance, params)
+#
+#     
+#    df_co = pd.read_csv('coherence.csv',header=None,names=['topics','coherence'])
+#    df_co['jsd'] = np.asarray(jsd)[df_co.index]
+#
+#    define_NB_colors()
+#
+#    fig, ax1 = plt.subplots(figsize=(14,6))
+#    
+#    ax1.set_xlabel('Topics')
+#    ax1.set_ylabel('Coherence', color=(0/255, 123/255, 209/255))
+#    ax1.plot(df_co['topics'], df_co['coherence'], color=(0/255, 123/255, 209/255))
+#    ax1.tick_params(axis='y', labelcolor=(0/255, 123/255, 209/255))
+#    
+#    ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+#    
+#    ax2.set_ylabel('JS distance', color=(146/255, 34/255, 156/255))  # we already handled the x-label with ax1
+#    ax2.plot(df_co['topics'], df_co['jsd'], color=(146/255, 34/255, 156/255))
+#    ax2.tick_params(axis='y', labelcolor=(146/255, 34/255, 156/255))
+#
+#    plt.xticks(df_co['topics'])
+#    fig.tight_layout() 
+#    fig.savefig(os.path.join(params['paths']['lda'], 'topic_selection.pdf'), dpi=300)
+#    plt.show()
     
-    
-    #lda_instance.lda_models, coherence_scores = optimize_topics(lda_instance, topics, plot=False)
-    #save_models(lda_instance, params)
-    
-    #lda_instance.lda_models, coherence_scores = load_models(lda_instance, topics, params)
-    #print(lda_instance.coherence_scores)
-    
+
+#    df_top = get_top_words(lda_instance.lda_models[1], lda_instance, params, topn=30)
+
     # Choose desired model
-    #load_model(lda_instance, 80, params)
+    
+    
     #generate_wordclouds(lda_instance, params)
 
 
