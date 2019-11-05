@@ -10,7 +10,6 @@ import numpy as np
 from nltk.stem.snowball import SnowballStemmer
 import copy
 from gensim.models import KeyedVectors
-from itertools import cycle, islice, repeat
 import codecs
 import json
 import glob
@@ -19,131 +18,21 @@ import gensim
 import pandas as pd
 from multiprocessing import Pool
 from functools import partial
-from matplotlib import pyplot as plt
-import scipy.cluster.hierarchy as hierarchy
-from scipy.spatial.distance import pdist
 
+from src.fui.cluster import ClusterTree
 from src.fui.utils import main_directory
 from src.fui.utils import dump_pickle
 
-class ClusterTree():
+def parse_topic_labels(num_topics,params):
     """
-    Build clusters from topic models using scipy.cluster.hierarchy.
-    :num_topics: Used to load a pre-trained topic model.
-    :metric: and :method: Used for HAC.
+    reads hand labeled topics from json file.
+    
     """
-    
-    def __init__(self, num_topics, metric='jensenshannon', method='ward'):
-        """
-        Saves linkage matrix :Z: and :nodelist:
-        """
-        
-        self.num_topics = num_topics
-        self.metric = metric
-        self.method = method
-        
-        folder_path = os.path.join(params['paths']['root'],params['paths']['lda'], 'lda_model_' + str(self.num_topics))
-        file_path = os.path.join(folder_path, 'trained_lda')
-        self.lda_model = gensim.models.LdaMulticore.load(file_path)
-        topics = self.lda_model.get_topics()
-        y = pdist(topics, metric=self.metric)
-        self.Z = hierarchy.linkage(y, method=self.method)
-        rootnode, self.nodelist = hierarchy.to_tree(self.Z,rd=True)
-    
-    def _get_children(self, id):
-        """
-        Recursively get all children of parent node :id:
-        """
-        if not self.nodelist[id].is_leaf():
-            for child in [self.nodelist[id].get_left(), self.nodelist[id].get_right()]:
-                yield child
-                for grandchild in self._get_children(child.id):
-                    yield grandchild
-                    
-    def children(self):
-        """
-        Returns a dict with k, v: parent: [children]. Does not include leaf nodes.
-        """
-        self.children = {}
-        for i in range(self.num_topics,len(self.nodelist)):
-            self.children[i] = [child.id for child in self._get_children(i)]
-        return self.children
-    
-    def _colorpicker(self,k):
-        """
-        Returns an NB color to visually group similar topics in dendrogram
-        
-        """
-        NB_colors = [(0, 123, 209),
-            (146, 34, 156),
-            (196, 61, 33),
-            (223, 147, 55),
-            (176, 210, 71)] 
-        
-        # Get flat clusters for grouping
-        self.flat_clusters(n=self.colors)
-        clist = list(islice(cycle(NB_colors), len(self.L)))
-        for c,i in enumerate(list(self.L)):
-            if k in [child.id for child in self._get_children(i)]:
-                color = clist[c]
-                return f"#{color[0]:02x}{color[1]:02x}{color[2]:02x}"
-        
-        # Gray is default
-        return "#666666"
-    
-    def dendrogram(self,w=10,h=10,colors=10,no_plot=False):
-        """
-        Draws dendrogram
-        :no_plot: Don's render figure. Use self.graph to render figure later
-        :colors: Approx. no of color clusters in figure.
-        """
-        
-        self.colors = colors
-        plt.figure(figsize=(w, h))
-        plt.title("Topic Dendrogram")
-        
-        #hierarchy.set_link_color_palette([colors.rgb2hex(rgb) for rgb in NB_colors])
-        self.graph = hierarchy.dendrogram(self.Z,
-                       orientation='right',
-                       #labels=labelList,
-                       distance_sort='descending',
-                       show_leaf_counts=False,
-                       no_plot=no_plot,
-                       #color_threshold=2.0*np.max(self.Z[:,2])
-                       link_color_func=self._colorpicker)
-
-    
-    def flat_clusters(self,n=8,init=1,criterion='maxclust'):
-        """
-        Returns flat clusters from the linkage matrix :Z:
-        """
-        if criterion is 'distance':
-            self.T = hierarchy.fcluster(self.Z,init,criterion='distance')
-            a = 0
-            while a < 20:
-                if self.T.max() < n:
-                    init = init-0.02
-                    a += 1
-                elif self.T.max() > n:
-                    init = init+0.02
-                    a += 1
-                else:
-                    self.L, self.M = hierarchy.leaders(self.Z,self.T)
-                    return self.T
-                self.T = hierarchy.fcluster(self.Z,init,criterion='distance')
-            self.L, self.M = hierarchy.leaders(self.Z,self.T)
-            return self.T
-        elif criterion is 'inconsistent':
-            self.T = hierarchy.fcluster(self.Z,criterion='inconsistent')
-            self.L, self.M = hierarchy.leaders(self.Z,self.T)
-            return self.T
-        elif criterion is 'maxclust':
-            self.T = hierarchy.fcluster(self.Z,t=n,criterion='maxclust')
-            self.L, self.M = hierarchy.leaders(self.Z,self.T)
-            return self.T
-        else:
-            print('Criteria not implemented')
-            return 0
+    label_path = os.path.join(params['paths']['root'],params['paths']['topic_labels'], 
+                        'labels'+str(num_topics)+'.json')
+    with open(label_path, 'r') as f:
+        labels = json.load(f)
+    return labels             
             
 def load_model(lda_instance, num_topics, params):
     try:
@@ -292,22 +181,10 @@ if __name__ == '__main__':
     with codecs.open(PARAMS_PATH, 'r', 'utf-8-sig') as json_file:  
         params = json.load(json_file)
     
-    c80 = ClusterTree(80)
-    children = c80.children()
+    c80 = ClusterTree(80,params)
+#    children = c80.children()
     c80.dendrogram(10,15,colors=15)
-    T = c80.flat_clusters(8,1)
+#    T = c80.flat_clusters(8,1)
     
     
     
-#    params['uncertainty_extended_w2v'] = extend_dict_w2v('uncertainty', params, n_words=10)            
-#    uncertainty_count(params, 'uncertainty_extended_w2v')
-#    df = merge_lda_u(params)
-    
-    
-    
-#    topic_labels = {}
-#    for l in range(80):
-#        topic_labels[l] = ['test']
-#    with open('topics_labels.json', 'w') as json_file:
-#        json.dump(topic_labels, json_file)
-    #df_u = load_parsed_data(params)
