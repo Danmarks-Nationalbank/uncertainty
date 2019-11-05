@@ -29,7 +29,7 @@ def parse_topic_labels(num_topics,params):
     
     """
     label_path = os.path.join(params['paths']['root'],params['paths']['topic_labels'], 
-                        'labels'+str(num_topics)+'.json')
+                        'epu'+str(num_topics)+'.json')
     with open(label_path, 'r') as f:
         labels = json.load(f)
     return labels             
@@ -92,11 +92,10 @@ def _stemtext(text, min_len=2, max_len=25):
     stemmed_list = [stemmer.stem(word) for word in list_to_stem if len(word) >= min_len and len(word) <= max_len]
     return stemmed_list
 
-def uncertainty_count(params, dict_name):
+def uncertainty_count(params, dict_name='uncertainty', extend=True):
     """
     Finds for articles containing words in bloom dictionary. Saves result to disk.
     args:
-    params: dict of input_params
     dict_name: name of bloom dict in params
     logic: matching criteria in params
     """
@@ -105,7 +104,10 @@ def uncertainty_count(params, dict_name):
     if not os.path.exists(out_path):
         os.makedirs(out_path)        
     
-    U_set = set(params[dict_name]['uncertainty'])
+    if extend:
+        U_set = set(extend_dict_w2v(dict_name, params, n_words=10))
+    else:
+        U_set = set(params[dict_name]['uncertainty'])
     
     #get parsed articles
     filelist = glob.glob(params['paths']['root']+
@@ -120,20 +122,20 @@ def uncertainty_count(params, dict_name):
         
         #stem articles
         print("Here!")
-        with Pool(3) as pool:
+        with Pool(4) as pool:
             df['body_stemmed'] = pool.map(_stemtext,
                                           df['ArticleContents'].values.tolist())
         
         print("Here!")
         #compare to dictionary
-        with Pool(3) as pool:
+        with Pool(4) as pool:
             df['u_count'] = pool.map(partial(_count, 
                                           word_set=U_set), 
                                           df['body_stemmed'].values.tolist())
         
         #save to disk
         df.rename({'ID2': 'article_id'}, axis=1, inplace=True)
-        dump_pickle(out_path,'u_count'+str(i+1997)+'.pkl',df[['ID2','u_count','ArticleDateCreated']])
+        dump_pickle(out_path,'u_count'+str(i+1997)+'.pkl',df[['article_id','u_count','ArticleDateCreated']])
 
 
 def _count(word_list, word_set):
@@ -160,18 +162,58 @@ def merge_lda_u(params):
     df_u = load_parsed_data(params)
     with open(params['paths']['root']+
               params['paths']['lda']+'\\document_topics\\document_topics.pkl', 'rb') as f:
-        df_lda = pickle.load(f)
-    print(df_lda.columns)
-    print(df_u.columns)
+        df = pickle.load(f)
     
-    df_lda = df_lda.merge(df_u, 'inner', 'article_id')
-    return df_lda
+    label_dict = parse_topic_labels(80,params)
+    labels = pd.DataFrame.from_dict(label_dict,orient='index',columns=['cat','region'])
+    labels['topic'] = labels.index.astype('int64')
+        
+    df = df.merge(df_u, 'inner', 'article_id')
+    df.drop(columns='ArticleDateCreated_y',inplace=True)
+    df.rename({'ArticleDateCreated_x':'ArticleDateCreated'},axis=1,inplace=True)
 
-def ECB_index(params):
-    with open("data\\intermediate\\lda\\document_topics.pkl", 'rb') as f_in:
-        df = pickle.load(f_in)
-    df['max_topic'] = df['topics'].apply(lambda x: np.argmax(x))
-    params['topic_dict']
+    return df
+
+def _aggregate(df, col, aggregation=['M'], normalize=True):
+    """
+    aggregates to means within 
+    each aggregation frequency
+    """
+
+    agg_dict = {}
+    for f in aggregation:
+        idx = df[[col, 'ArticleDateCreated']].groupby(
+            [pd.Grouper(key='ArticleDateCreated', freq=f)]
+        ).agg(['mean']).reset_index()
+        
+        idx.set_index('ArticleDateCreated', inplace=True)
+
+        if normalize:
+            #normalize to mean = 0, std = 1
+            idx.columns = idx.columns.get_level_values(0)
+            idx[(col+'_norm')]=(idx[col]-idx[col].mean())/idx[col].std()
+            
+        #dump_csv(folder_path,var+'_score_'+f+'.csv',idx)
+        agg_dict[f] = idx
+    return agg_dict
+
+def ECB_index(params,df,cat=['P'],num_topics=80,weighted=False):
+    label_dict = parse_topic_labels(80,params)
+    labels = pd.DataFrame.from_dict(label_dict,orient='index',columns=['cat','region'])
+    labels['topic'] = labels.index.astype('int64')
+    
+    df = df.merge(right=labels, how='left', left_on='max_topic',right_on='topic')
+
+    if not weighted:
+        df['max_topic'] = df['topics'].apply(lambda x: np.argmax(x))
+        df['ECB'] = (df['cat'].isin(cat)) * 1
+        idx = _aggregate(df,'ECB')
+    
+    #TODO:
+    else: 
+        #df['topics'].apply()
+    
+    return idx
     
 if __name__ == '__main__':
  
@@ -181,10 +223,9 @@ if __name__ == '__main__':
     with codecs.open(PARAMS_PATH, 'r', 'utf-8-sig') as json_file:  
         params = json.load(json_file)
     
-    c80 = ClusterTree(80,params)
-#    children = c80.children()
-    c80.dendrogram(10,15,colors=15)
-#    T = c80.flat_clusters(8,1)
+    #uncertainty_count(params, 'uncertainty')
     
-    
+    df = merge_lda_u(params)
+    #df2 = df.sample(1000)
+    idx = ECB_index(params,df)
     
