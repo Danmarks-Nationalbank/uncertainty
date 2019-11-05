@@ -9,7 +9,6 @@ import random
 import csv
 import copy
 
-
 from itertools import cycle, islice
 from collections import Counter
 from functools import partial
@@ -61,36 +60,44 @@ def preprocess(text, lemmatizer, stopfile='data/stopwords.txt'):
     
     return ' '.join([word for word in tokens])
 
-def print_topics(lda_model, params, topn=30):
+def print_topics(lda_instance, params, topn=30, unique_sort=True):
 #    topics = lda_model.get_topics()
 #    y = pdist(topics, metric='jensenshannon')
 #    Z = hac.linkage(y, method='ward')
 #    clusters = hac.fcluster(Z, t=0.8, criterion='distance')
+    lda_model = lda_instance.lda_model
     
     csv_path = os.path.join(params['paths']['root']+params['paths']['lda'], 
                             'topic_words'+str(lda_model.num_topics)+'.csv') 
-    word_lists = []
-    for t in range(lda_model.num_topics):
-        word_list = lda_model.show_topic(t,topn)
-        if not len(word_lists):
-            word_list = [[w[0]] for w in word_list]
-            word_lists = word_list
-        else:
-            word_list = [w[0] for w in word_list]
-            for i in range(topn):
-                word_lists[i].append(word_list[i])
-                
     header = ['topic_'+str(x) for x in range(lda_model.num_topics)]
-#    header2 = ['cluster_'+str(x) for x in list(clusters)]
-    with open(csv_path, mode='w', newline='\n', encoding='utf-8-sig') as csv_out:
-        csvwriter = csv.writer(csv_out, delimiter=',')
-        csvwriter.writerow(header)
-#        csvwriter.writerow(header2)
-        for i in range(topn):
-            csvwriter.writerow(word_lists[i])
-               
     
+    if not unique_sort:
+        word_lists = []
+        for t in range(lda_model.num_topics):
+            word_list = lda_model.show_topic(t,topn)
+            if not len(word_lists):
+                word_list = [[w[0]] for w in word_list]
+                word_lists = word_list
+            else:
+                word_list = [w[0] for w in word_list]
+                for i in range(topn):
+                    word_lists[i].append(word_list[i])
+        with open(csv_path, mode='w', newline='\n', encoding='utf-8-sig') as csv_out:
+            csvwriter = csv.writer(csv_out, delimiter=',')
+            csvwriter.writerow(header)
+            for i in range(topn):
+                csvwriter.writerow(word_lists[i])
+            
+    else: 
+        df = get_unique_words(lda_model, lda_instance, params, topn)
 
+        df = df[['word']]
+        df.index = pd.MultiIndex.from_arrays(
+            [df.index.get_level_values(1), df.groupby(level=1).cumcount()],
+            names=['token', 'topic'])
+        df = df.unstack(level=0)
+        df.to_csv(csv_path,header=header,encoding='utf-8-sig',index=False)
+                
 def optimize_topics(lda_instance, topics_to_optimize, plot=False, plot_title=""):
     coherence_scores = []
     lda_models = []
@@ -393,7 +400,7 @@ def _get_scaled_significance(lda_model, params, n_words=200):
     df.sort_values(['topic','scaled_weight'],inplace=True,ascending=False)
     return df['scaled_weight']
 
-def get_top_words(lda_model, lda_instance, params, topn=10):
+def get_unique_words(lda_model, lda_instance, params, topn=10):
     df_out = pd.DataFrame(data=None, columns=['scaled_weight','word'])
 
     df = _get_scaled_significance(lda_model, params, topn)
@@ -404,10 +411,8 @@ def get_top_words(lda_model, lda_instance, params, topn=10):
         for t in range(0,topn,1):
             tokens.append(lda_instance.dictionary[df_topic.index.values[t][0]])
         tokens = pd.DataFrame(tokens, index=df_topic.index, columns=['word'])
-        print(tokens)
         df_topic = pd.concat([df_topic,tokens], axis=1, sort=True)
-        #print(tokens)
-        #print(df_topic)
+
         df_out = df_out.append(df_topic)
     df_out.index = pd.MultiIndex.from_tuples(df_out.index)
     df_out = df_out.rename_axis(['token_id','topic'])
@@ -671,3 +676,5 @@ def _smooth(y, smoothing_points):
     box = np.ones(smoothing_points) / smoothing_points
     y_smooth = np.convolve(y, box, mode='valid')
     return y_smooth
+
+
