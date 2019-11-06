@@ -30,12 +30,12 @@ if __name__ == "__main__":
     #Step 1: Import Børsen articles
     #parse_raw_data(params, nrows=None)
     
-#    #Step 2: Extend Bloom dict using pre-trained embeddings
-     params['bloom_extended_w2v'] = extend_dict_w2v('bloom_extended', params, n_words=10)            
-#    
-#    #Step 3: Get Bloom binary measure for each article using eval conditions in input_params
-#    for logic in ['EandPandU','EandU','EorPandU','PandU']:
-#        bloom_measure(params,dict_name='bloom_extended_w2v',logic=logic,start_year=2000, end_year=2019)
+    #Step 2: Extend Bloom dict using pre-trained embeddings
+    params['bloom_extended_w2v'] = extend_dict_w2v('bloom_extended', params, n_words=10)            
+    
+    #Step 3: Get Bloom binary measure for each article using eval conditions in input_params
+    for logic in ['EandPandU','EandU','EorPandU','PandU']:
+        bloom_measure(params,dict_name='bloom_extended_w2v',logic=logic,start_year=2000,end_year=2019,weighted=True)
     
     #Step 4: Aggregate, write csv and plot
     for logic in ['EandPandU','EandU','EorPandU']:
@@ -47,13 +47,12 @@ if __name__ == "__main__":
         print('Logic: '+logic+', Corr: '+"%.2f" % round(corr,3))
         
         
-#    #Step 5: Package to zip
-#    files_to_zip = [f for f in glob.glob('C:/projects/FUI/data/bloom/bloom_extended_w2v/**/*') if not os.path.basename(f).endswith('pkl')]
-#    files_to_zip = [os.path.join(*(f.split(os.path.sep)[1:])) for f in files_to_zip]
-#    os.chdir(params['paths']['root']+params['paths']['bloom']+'bloom_extended_w2v')
-#    with ZipFile('fui.zip','w') as zip: 
-#        # writing each file one by one 
-#        for file in files_to_zip: 
-#            zip.write(file) 
-    
-    
+    #Step 5: Package to zip
+    files_to_zip = [f for f in glob.glob('C:/projects/FUI/data/bloom/bloom_extended_w2v/**/*') if not os.path.basename(f).endswith('pkl')]
+    files_to_zip = [os.path.join(*(f.split(os.path.sep)[1:])) for f in files_to_zip]
+    os.chdir(params['paths']['root']+params['paths']['bloom']+'bloom_extended_w2v')
+    with ZipFile('fui.zip','w') as zip: 
+        # writing each file one by one 
+        for file in files_to_zip: 
+            zip.write(file) 
+            

@@ -52,7 +52,7 @@ def _check_stem_duplicates(word_list):
     stemmed_list = list(dict.fromkeys(stemmed_list))
     return stemmed_list
         
-def bloom_measure(params, dict_name, logic, start_year=2000, end_year=2019):
+def bloom_measure(params, dict_name, logic, start_year=2000, end_year=2019, weighted=False):
     """
     Finds for articles containing words in bloom dictionary. Saves result to disk.
     args:
@@ -88,21 +88,34 @@ def bloom_measure(params, dict_name, logic, start_year=2000, end_year=2019):
         with Pool() as pool:
             df['body_stemmed'] = pool.map(_stemtext, 
                                           df['ArticleContents'].values.tolist())
+        if not weighted:    
+            #compare to dictionary
+            with Pool() as pool:
+                df['bloom'] = pool.map(partial(_bloom_compare, 
+                                              logic=logic_str, 
+                                              bloom_E=b_E, 
+                                              bloom_P=b_P, 
+                                              bloom_U=b_U), 
+                                              df['body_stemmed'].values.tolist())
             
-        #compare to dictionary
-        with Pool() as pool:
-            df['bloom'] = pool.map(partial(_bloom_compare, 
-                                          logic=logic_str, 
-                                          bloom_E=b_E, 
-                                          bloom_P=b_P, 
-                                          bloom_U=b_U), 
-                                          df['body_stemmed'].values.tolist())
-        
-        #save to disk
-        dump_pickle(out_path,'bloom'+str(f[1])+'.pkl',df[['ID2','bloom','ArticleDateCreated']])
-        
-        
-def bloom_aggregate(folder_path, params, aggregation=['W','M','Q']):
+            #save to disk
+            dump_pickle(out_path,'bloom'+str(f[1])+'.pkl',df[['article_id','bloom','ArticleDateCreated']])
+        else:
+            logic_str = "bool(bloom_E & stem_set) and bool(bloom_P & stem_set)"
+            df_u = load_uncertainty_count(params, f[1])
+            df = df.merge(df_u[['u_count','article_id']], how='left', on='article_id')
+            with Pool() as pool:
+                df['bloomEP'] = pool.map(partial(_bloom_compare, 
+                                              logic=logic_str, 
+                                              bloom_E=b_E, 
+                                              bloom_P=b_P, 
+                                              bloom_U=b_U), 
+                                              df['body_stemmed'].values.tolist())
+            df['bloom'] = df['bloomEP']*df['u_count']
+            dump_pickle(out_path,'bloom'+str(f[1])+'_weighted.pkl',df[['article_id','bloom','bloomEP','u_count','ArticleDateCreated']])
+
+            
+def _aggregate(folder_path, params, aggregation=['W','M','Q']):
     list_bloom = glob.glob(folder_path+'\\*.pkl')
     """
     loads saved bloom pickles and aggregates to means within 
@@ -130,6 +143,13 @@ def bloom_aggregate(folder_path, params, aggregation=['W','M','Q']):
         dump_csv(folder_path,'bloom_score_'+f+'.csv',bloom_idx)
         agg_dict[f] = bloom_idx
     return agg_dict
+
+def load_uncertainty_count(params, year):
+    file_path = params['paths']['root']+params['paths']['parsed_news']+'u_count'+str(year)+'.pkl'
+       
+    with open(file_path, 'rb') as f_in:
+        df = pickle.load(f_in)
+    return df
         
 def plot_index(
     out_path, df_dict, params, plot_vix=True, freq='M', start_year=2012, end_year=2019):
@@ -144,7 +164,8 @@ def plot_index(
     else:
         end_str = ''
     
-    vix = pd.read_csv(params['paths']['root']+'data/vixcurrent.csv', usecols=[0,4], names=['date','vix'], header=0)
+    vix = pd.read_csv(params['paths']['root']+'data/vixcurrent.csv', 
+                      usecols=[0,4], names=['date','vix'], header=0)
     vix['date'] = pd.to_datetime(vix['date'])
     vix.set_index('date', inplace=True)
     vix = vix.resample(freq).mean()

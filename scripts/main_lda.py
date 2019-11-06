@@ -21,8 +21,8 @@ from src.fui.lda import LDA
 from src.fui.utils import main_directory, dump_pickle, dump_csv, define_NB_colors
 from src.fui.ldatools import preprocess, optimize_topics, create_dictionary, create_corpus, save_models, load_model, load_models
 from src.fui.ldatools import generate_wordclouds, merge_documents_and_topics
-from src.fui.ldatools import get_top_words, jsd_measure, get_perplexity
-from src.fui.ldatools import print_topics, cluster_topics
+from src.fui.ldatools import get_unique_words, jsd_measure
+from src.fui.ldatools import print_topics
 from src.fui.preprocessing import parse_raw_data, load_parsed_data
 
 if __name__ == "__main__":
@@ -36,33 +36,26 @@ if __name__ == "__main__":
     with codecs.open(PARAMS_PATH, 'r', 'utf-8-sig') as json_file:  
         params = json.load(json_file)
     
-    #parse_raw_data(params, nrows=None)
+    parse_raw_data(params, nrows=None)
     
-    filelist = glob.glob(params['paths']['root']+
-                         params['paths']['parsed_news']+'boersen*.pkl') 
-
-    lemmatizer = lemmy.load("da")
-    lda_instance = LDA(filelist, params, lemmatizer, test_share=0.02)
-    
-    create_dictionary(lda_instance, params, load_bigrams=False)
-    create_corpus(lda_instance, params)
-
-#    lda_instance.lda_models, coherence_scores = optimize_topics(lda_instance, topics, plot=False)
-#    save_models(lda_instance, params)
-##    
- 
-    load_model(lda_instance, 80, params)
-    topics = lda_instance.lda_model.get_topics()
-    y = pdist(topics, metric='jensenshannon')
-    Z = hac.linkage(y, method='ward')
-    rootnode, nodelist = hac.to_tree(Z,rd=True)
-    children = {}
-    for i in range(79,len(nodelist)):
-        children[i] = [child.id for child in _children(nodelist,i)]
-        
-#    print_topics(lda_instance.lda_model,params)
+#    filelist = glob.glob(params['paths']['root']+
+#                         params['paths']['parsed_news']+'boersen*.pkl') 
+#
+#    lemmatizer = lemmy.load("da")
+#    lda_instance = LDA(filelist, params, lemmatizer, test_share=0.02)
 #    
-#    #df = get_top_words(lda_instance.lda_model, lda_instance, params, topn=30)
+#    create_dictionary(lda_instance, params, load_bigrams=False)
+#    create_corpus(lda_instance, params)
+#
+##    lda_instance.lda_models, coherence_scores = optimize_topics(lda_instance, topics, plot=False)
+##    save_models(lda_instance, params)
+###    
+# 
+#    load_model(lda_instance, 80, params)
+#
+#        
+#    print_topics(lda_instance,params,topn=30,unique_sort=True)
+#    
 #    jsd = []
 #    for topic in topics:
 #        load_model(lda_instance,topic,params)

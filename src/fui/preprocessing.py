@@ -77,7 +77,7 @@ def parse_raw_data(params, nrows=None):
     df['ArticleDateCreated'] = pd.to_datetime(df['ArticleDateCreated'], format='%Y-%m-%d')
     
     #create unique row index
-    df['ID2'] = df.reset_index().index
+    df['article_id'] = df.reset_index().index
     
     #process in yearly chunks
     df['Year'] = df['ArticleDateCreated'].dt.year

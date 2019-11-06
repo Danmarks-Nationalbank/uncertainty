@@ -4,6 +4,7 @@
         "enriched_text": "data\\intermediate\\enriched_news\\",
         "firm_events": "data\\intermediate\\firm_events\\",
 		"lda": "data\\intermediate\\lda\\",
+		"topic_labels": "data\\intermediate\\lda\\topic_labels",
         "boersen_articles": "data\\input\\",
         "parsed_news": "data\\intermediate\\parsed_news\\",
 		"w2v_model": "data\\wiki.da.vec",

@@ -86,7 +86,6 @@ def _stemtext(text, min_len=2, max_len=25):
 
     text = text.lower()
     list_to_stem = []
-    print("stemming!")
     list_to_stem = [match.group() for match in pat.finditer(text)]
     
     stemmed_list = [stemmer.stem(word) for word in list_to_stem if len(word) >= min_len and len(word) <= max_len]
@@ -105,15 +104,17 @@ def uncertainty_count(params, dict_name='uncertainty', extend=True):
         os.makedirs(out_path)        
     
     if extend:
-        U_set = set(extend_dict_w2v(dict_name, params, n_words=10))
+        U_set = set(list(extend_dict_w2v(dict_name, params, n_words=10).values())[0])
     else:
-        U_set = set(params[dict_name]['uncertainty'])
-    
+        U_set = set(list(params[dict_name].values())[0])
+
     #get parsed articles
     filelist = glob.glob(params['paths']['root']+
                          params['paths']['parsed_news']+'boersen*.pkl') 
+    yearlist = [f[-8:-4] for f in filelist]
 
     for (i,f) in enumerate(filelist):
+        print(f"Processing year {yearlist[i]}.")
         with open(f, 'rb') as data:
             try:
                 df = pickle.load(data)
@@ -121,12 +122,10 @@ def uncertainty_count(params, dict_name='uncertainty', extend=True):
                 print("Parsed news is not a valid pickle!")
         
         #stem articles
-        print("Here!")
         with Pool(4) as pool:
             df['body_stemmed'] = pool.map(_stemtext,
                                           df['ArticleContents'].values.tolist())
         
-        print("Here!")
         #compare to dictionary
         with Pool(4) as pool:
             df['u_count'] = pool.map(partial(_count, 
@@ -134,8 +133,7 @@ def uncertainty_count(params, dict_name='uncertainty', extend=True):
                                           df['body_stemmed'].values.tolist())
         
         #save to disk
-        df.rename({'ID2': 'article_id'}, axis=1, inplace=True)
-        dump_pickle(out_path,'u_count'+str(i+1997)+'.pkl',df[['article_id','u_count','ArticleDateCreated']])
+        dump_pickle(out_path,'u_count'+yearlist[i]+'.pkl',df[['article_id','u_count','ArticleDateCreated']])
 
 
 def _count(word_list, word_set):
@@ -197,23 +195,24 @@ def _aggregate(df, col, aggregation=['M'], normalize=True):
         agg_dict[f] = idx
     return agg_dict
 
-def ECB_index(params,df,cat=['P'],num_topics=80,weighted=False):
+def ECB_index(params,df,cat=['P'],num_topics=80,use_weights=False):
     label_dict = parse_topic_labels(80,params)
     labels = pd.DataFrame.from_dict(label_dict,orient='index',columns=['cat','region'])
     labels['topic'] = labels.index.astype('int64')
     
-    df = df.merge(right=labels, how='left', left_on='max_topic',right_on='topic')
-
-    if not weighted:
+    if not use_weights:
+        df = df.merge(right=labels, how='left', left_on='max_topic',right_on='topic')
         df['max_topic'] = df['topics'].apply(lambda x: np.argmax(x))
         df['ECB'] = (df['cat'].isin(cat)) * 1
         idx = _aggregate(df,'ECB')
+        return idx
     
     #TODO:
     else: 
+        pass
         #df['topics'].apply()
     
-    return idx
+    
     
 if __name__ == '__main__':
  
@@ -223,9 +222,9 @@ if __name__ == '__main__':
     with codecs.open(PARAMS_PATH, 'r', 'utf-8-sig') as json_file:  
         params = json.load(json_file)
     
-    #uncertainty_count(params, 'uncertainty')
-    
-    df = merge_lda_u(params)
-    #df2 = df.sample(1000)
-    idx = ECB_index(params,df)
+    uncertainty_count(params)
+    #U_set = set(dict_out)
+#    df = merge_lda_u(params)
+#    df2 = df.sample(1000)
+    #idx = ECB_index(params,df)
     

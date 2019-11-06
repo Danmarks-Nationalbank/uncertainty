@@ -81,7 +81,9 @@ class ClusterTree():
     
     def _labelpicker(self,k):
         labels = parse_topic_labels(self.num_topics,self.params)
-        return ', '.join(labels[str(k)])
+        _list = labels[str(k)]
+        _list.append(str(k))
+        return ', '.join(_list)
         
     def dendrogram(self,w=10,h=10,colors=10,color_labels=True):
         """
