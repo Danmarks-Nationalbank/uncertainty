@@ -36,25 +36,25 @@ if __name__ == "__main__":
     with codecs.open(PARAMS_PATH, 'r', 'utf-8-sig') as json_file:  
         params = json.load(json_file)
     
-    parse_raw_data(params, nrows=None)
+#    parse_raw_data(params, nrows=None)
     
-#    filelist = glob.glob(params['paths']['root']+
-#                         params['paths']['parsed_news']+'boersen*.pkl') 
+    filelist = glob.glob(params['paths']['root']+
+                         params['paths']['parsed_news']+'boersen*.pkl') 
 #
-#    lemmatizer = lemmy.load("da")
-#    lda_instance = LDA(filelist, params, lemmatizer, test_share=0.02)
+    lemmatizer = lemmy.load("da")
+    lda_instance = LDA(filelist, params, lemmatizer, test_share=0.02)
 #    
-#    create_dictionary(lda_instance, params, load_bigrams=False)
-#    create_corpus(lda_instance, params)
+    create_dictionary(lda_instance, params, load_bigrams=False)
+    create_corpus(lda_instance, params)
 #
 ##    lda_instance.lda_models, coherence_scores = optimize_topics(lda_instance, topics, plot=False)
 ##    save_models(lda_instance, params)
 ###    
 # 
-#    load_model(lda_instance, 80, params)
+    load_model(lda_instance, 80, params)
 #
 #        
-#    print_topics(lda_instance,params,topn=30,unique_sort=True)
+    print_topics(lda_instance,params,topn=40,unique_sort=True)
 #    
 #    jsd = []
 #    for topic in topics:

@@ -18,6 +18,10 @@ import gensim
 import pandas as pd
 from multiprocessing import Pool
 from functools import partial
+from matplotlib import pyplot as plt
+import matplotlib.dates as mdates
+import matplotlib.patches as patches
+from cycler import cycler
 
 from src.fui.cluster import ClusterTree
 from src.fui.utils import main_directory
@@ -135,7 +139,6 @@ def uncertainty_count(params, dict_name='uncertainty', extend=True):
         #save to disk
         dump_pickle(out_path,'u_count'+yearlist[i]+'.pkl',df[['article_id','u_count','ArticleDateCreated']])
 
-
 def _count(word_list, word_set):
     count = 0
     for word in word_list:
@@ -161,17 +164,19 @@ def merge_lda_u(params):
     with open(params['paths']['root']+
               params['paths']['lda']+'\\document_topics\\document_topics.pkl', 'rb') as f:
         df = pickle.load(f)
-    
-    label_dict = parse_topic_labels(80,params)
-    labels = pd.DataFrame.from_dict(label_dict,orient='index',columns=['cat','region'])
-    labels['topic'] = labels.index.astype('int64')
-        
+
     df = df.merge(df_u, 'inner', 'article_id')
     df.drop(columns='ArticleDateCreated_y',inplace=True)
     df.rename({'ArticleDateCreated_x':'ArticleDateCreated'},axis=1,inplace=True)
 
     return df
 
+def load_doc_topics(params):
+    with open(params['paths']['root']+
+              params['paths']['lda']+'\\document_topics\\document_topics.pkl', 'rb') as f:
+        df = pickle.load(f)
+    return df.sample(20000)
+    
 def _aggregate(df, col, aggregation=['M'], normalize=True):
     """
     aggregates to means within 
@@ -193,26 +198,152 @@ def _aggregate(df, col, aggregation=['M'], normalize=True):
             
         #dump_csv(folder_path,var+'_score_'+f+'.csv',idx)
         agg_dict[f] = idx
-    return agg_dict
+    if len(aggregation) == 1:
+        return agg_dict[aggregation[0]]
+    else:
+        return agg_dict
+    
+def plot_index(
+    out_path, idx, params, idx_name, plot_vix=True, start_year=2000, end_year=2019):
+    """
+    """
+    define_NB_colors()
+    years = mdates.YearLocator()   # every year
+    months = mdates.MonthLocator((1,4,7,10))  
+    years_fmt = mdates.DateFormatter('%Y')
+    if end_year == 2019:
+        end_str = '-05-31'
+    else:
+        end_str = ''
+    
+    vix = pd.read_csv(params['paths']['root']+'data/v1x_monthly.csv', 
+                      names=['date','vix'], header=0)
+    vix['date'] = pd.to_datetime(vix['date'])
+    vix.set_index('date', inplace=True)
+    vix.columns = vix.columns.get_level_values(0)
+    vix = vix[str(start_year):str(end_year)+end_str]   
+    vix['vix'] = normalize(vix['vix'])
+    
+    idx = idx[str(start_year):str(end_year)+end_str]
+    
+    fig, ax = plt.subplots(figsize=(14,6))
+    ax.plot(idx.index, idx[idx_name], label='Børsen Uncertainty Index')
+    if plot_vix:
+        ax.plot(vix.index, vix.vix, label='VDAX-NEW')
+    ax.legend(frameon=False, loc='upper left')    
 
-def ECB_index(params,df,cat=['P'],num_topics=80,use_weights=False):
-    label_dict = parse_topic_labels(80,params)
+    ax.xaxis.set_major_locator(years)
+    ax.xaxis.set_major_formatter(years_fmt)
+    ax.xaxis.set_minor_locator(months)
+    
+    
+    corr = _calc_corr(vix,idx[idx_name])
+    ax.text(0.77, 0.95, 'Correlation: %.2f' % round(corr,2) , transform=ax.transAxes)
+    
+    plt.show()
+    fig.savefig(f'{out_path}\\[idx_name]_plot.png', dpi=300)
+    return corr, fig, ax
+
+def ECB_index(params,df,cat=['P','F'],num_topics=80,use_weights=False,
+              threshold=0.0,req_all=False):
+    
+    if threshold < 0.0:
+        print("No negative thresholds.")
+        return 0
+    
+    label_dict = parse_topic_labels(num_topics,params)
     labels = pd.DataFrame.from_dict(label_dict,orient='index',columns=['cat','region'])
     labels['topic'] = labels.index.astype('int64')
+    labels.fillna(value='N/A', inplace=True)
     
     if not use_weights:
-        df = df.merge(right=labels, how='left', left_on='max_topic',right_on='topic')
         df['max_topic'] = df['topics'].apply(lambda x: np.argmax(x))
-        df['ECB'] = (df['cat'].isin(cat)) * 1
+        df['max_topic_cat'] = df['max_topic'].apply(lambda x: labels.cat[labels['topic'] == x].values[0])
+        #df = df.merge(right=labels, how='left', left_on='max_topic',right_on='topic')
+        if not req_all:
+            df['ECB'] = df['max_topic_cat'].apply(lambda x : bool(set(x).intersection(set(cat)))*1)
+        else:
+            df['ECB'] = df['max_topic_cat'].apply(lambda x : bool(set(x)==set(cat))*1)
         idx = _aggregate(df,'ECB')
         return idx
+
+    else:
+        if threshold > 0.0:
+            idx_name = 'ECB_W_TH'
+        else:
+            idx_name = 'ECB_W'
+        
+        if not req_all:
+            topic_idx = labels[labels['cat'].apply(
+                    lambda x : bool(set([x]).intersection(set(cat))))
+                    ].index.tolist()
+        else:
+            topic_idx = labels[labels['cat'].apply(
+                    lambda x : bool(set([x])==(set(cat))))
+                    ].index.tolist()
+        df[idx_name] = df['topics'].apply(_topic_weights, args=(topic_idx,threshold))
+        idx = _aggregate(df,idx_name)
+        return idx
+
+def intersection_index(params,df,cat=['P','F'],num_topics=80,threshold=0.0,exclude_dk=True):
+    if threshold < 0.0:
+        print("No negative thresholds.")
+        return 0
     
-    #TODO:
-    else: 
-        pass
-        #df['topics'].apply()
+    label_dict = parse_topic_labels(num_topics,params)
+    labels = pd.DataFrame.from_dict(label_dict,orient='index',columns=['cat','region'])
+    labels['topic'] = labels.index.astype('int64')
+    labels.fillna(value='N/A', inplace=True)
     
+    for c in cat:
+        topic_idx = labels[labels['cat'].apply(
+                    lambda x : bool(set([x]).intersection(set([c]))))
+                    ].index.tolist()
+        if exclude_dk:
+            region_idx = labels.index.values[labels['region'] is not 'DK'].tolist()
+        else:
+            region_idx = topic_idx
+            
+        df[c] = df['topics'].apply(_topic_weights, args=(topic_idx,region_idx,0.0))
+#    df['in_idx'] = (df[cat] > threshold).all(1).astype(int)*df
+    df['in_idx'] = df.loc[:, cat].prod(axis=1)       
+
+    idx = _aggregate(df,'in_idx')
+    return idx
     
+def _topic_weights(topic_weights,topic_idx,region_idx,threshold):
+    if threshold > 0.0:
+        psum = np.array(
+                [topic_weights[int(i)] for i in topic_idx if topic_weights[int(i)] >= threshold and i in region_idx]).sum()
+    else:
+        psum = np.array([topic_weights[int(i)] for i in topic_idx if i in region_idx]).sum()
+    return psum
+
+def define_NB_colors():
+    """
+    Defines Nationalbankens' colors and update matplotlib to use those as default
+    """
+    c = cycler(
+        'color',
+        [
+            (0/255, 123/255, 209/255),
+            (146/255, 34/255, 156/255),
+            (196/255, 61/255, 33/255),
+            (223/255, 147/255, 55/255),
+            (176/255, 210/255, 71/255),
+            (102/255, 102/255, 102/255)
+        ])
+    plt.rcParams["axes.prop_cycle"] = c
+    return c
+
+def normalize(series):
+    return (series-series.mean())/series.std()
+
+def _calc_corr(df1,df2):
+    df1 = df1.join(df2, how='inner')
+    corr_mat = pd.np.corrcoef(df1.iloc[:,0].tolist(), df1.iloc[:,1].tolist())
+    print(corr_mat)
+    return corr_mat[0,1]
     
 if __name__ == '__main__':
  
@@ -222,9 +353,30 @@ if __name__ == '__main__':
     with codecs.open(PARAMS_PATH, 'r', 'utf-8-sig') as json_file:  
         params = json.load(json_file)
     
-    uncertainty_count(params)
-    #U_set = set(dict_out)
-#    df = merge_lda_u(params)
-#    df2 = df.sample(1000)
-    #idx = ECB_index(params,df)
+    #uncertainty_count(params)
+    #df = merge_lda_u(params)
     
+    #idx = ECB_index(params,df,use_weights=True)
+    #idx2 = ECB_index(params,df,use_weights=True,threshold=2e-04)
+    #test = labels.index[labels['cat'] == 'P'].tolist()
+    #idx = ECB_index(params,df,use_weights=True,threshold=2e-04)
+    #df2 = df.sample(10000)
+    #df = load_doc_topics(params)
+    cl80=ClusterTree(80,params)
+    #cl80.get_topic_sums(df)
+    cl80.get_node_weights(df)
+    cl80.node_weights
+    fig, ax, R = cl80.dendrogram()
+        
+    
+#    in_idx = intersection_index(params,df)
+#    
+#    plot_index(params['paths']['root']+params['paths']['lda'],
+#               in_idx, params, 'in_idx_norm')
+#    NB_blue = '#007bd1'
+#    fig = plt.figure(figsize=(5, 5))
+#    ax = fig.add_subplot(111)
+#    ax.scatter(df2['P'], df2['F'], marker='o', c='#007bd1')
+#    rect = patches.Rectangle((0.2,0.2),0.5,0.5,linewidth=1,edgecolor='r',facecolor='none')
+#    ax.add_patch(rect)
+#    plt.show()

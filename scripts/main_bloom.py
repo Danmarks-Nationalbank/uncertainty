@@ -47,12 +47,12 @@ if __name__ == "__main__":
         print('Logic: '+logic+', Corr: '+"%.2f" % round(corr,3))
         
         
-    #Step 5: Package to zip
-    files_to_zip = [f for f in glob.glob('C:/projects/FUI/data/bloom/bloom_extended_w2v/**/*') if not os.path.basename(f).endswith('pkl')]
-    files_to_zip = [os.path.join(*(f.split(os.path.sep)[1:])) for f in files_to_zip]
-    os.chdir(params['paths']['root']+params['paths']['bloom']+'bloom_extended_w2v')
-    with ZipFile('fui.zip','w') as zip: 
-        # writing each file one by one 
-        for file in files_to_zip: 
-            zip.write(file) 
+#    #Step 5: Package to zip
+#    files_to_zip = [f for f in glob.glob('C:/projects/FUI/data/bloom/bloom_extended_w2v/**/*') if not os.path.basename(f).endswith('pkl')]
+#    files_to_zip = [os.path.join(*(f.split(os.path.sep)[1:])) for f in files_to_zip]
+#    os.chdir(params['paths']['root']+params['paths']['bloom']+'bloom_extended_w2v')
+#    with ZipFile('fui.zip','w') as zip: 
+#        # writing each file one by one 
+#        for file in files_to_zip: 
+#            zip.write(file) 
             
