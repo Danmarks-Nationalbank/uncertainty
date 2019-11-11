@@ -1,19 +1,14 @@
 import os
-import sys
-#hacky spyder crap
-#sys.path.insert(1, 'C:\\Users\\EGR\\AppData\\Roaming\\Python\\Python37\\site-packages')
-sys.path.insert(1, 'D:\\projects\\FUI')
-sys.path.insert(1, 'D:\\projects\\FUI\\env\\Lib\\site-packages')
-sys.path.insert(1, 'C:\\Users\\EGR\\AppData\\Roaming\\Python\\Python37\\site-packages')
 from itertools import cycle, islice
-import json
 import gensim
 import numpy as np
 import pandas as pd
+import pickle
 from matplotlib import pyplot as plt
 from matplotlib.collections import LineCollection
 import scipy.cluster.hierarchy as hierarchy
-import src.fui.hierarchymod as hierarchymod
+import fui.hierarchymod as hierarchymod
+from fui.utils import params
 from scipy.spatial.distance import pdist
 
 class ClusterTree():
@@ -23,7 +18,7 @@ class ClusterTree():
     :metric: and :method: Used for HAC.
     """
     
-    def __init__(self, num_topics, params, metric='jensenshannon', method='ward'):
+    def __init__(self, num_topics, metric='jensenshannon', method='ward'):
         """
         Saves linkage matrix :Z: and :nodelist:
         """
@@ -31,15 +26,13 @@ class ClusterTree():
         self.num_topics = num_topics
         self.metric = metric
         self.method = method
-        self.params = params
         self.scale = 200
         
-        folder_path = os.path.join(params['paths']['root'],params['paths']['lda'], 
+        folder_path = os.path.join(params().paths['lda'], 
                                    'lda_model_' + str(self.num_topics))
         file_path = os.path.join(folder_path, 'trained_lda')
         self.lda_model = gensim.models.LdaMulticore.load(file_path)
-        topics = self.lda_model.get_topics()
-        y = pdist(topics, metric=self.metric)
+        y = pdist(self.lda_model.get_topics(), metric=self.metric)
         self.Z = hierarchy.linkage(y, method=self.method)
         rootnode, self.nodelist = hierarchy.to_tree(self.Z,rd=True)
     
@@ -62,15 +55,18 @@ class ClusterTree():
             self.children[i] = [child.id for child in self._get_children(i)]
         return self.children
     
-    def get_topic_sums(self,df):
+    def _get_topic_sums(self):
         """
         Get sum of topic probabilities across articles.
         """
+        with open(params().paths['doc_topics']+'document_topics.pkl', 'rb') as f:
+            df = pickle.load(f)
+
         df_topics = df['topics'].apply(pd.Series)
         self.topic_sums = df_topics.sum(axis=0,numeric_only=True)
     
-    def get_node_weights(self,df):
-        self.get_topic_sums(df)
+    def get_node_weights(self):
+        self._get_topic_sums()
         self.node_weights = [None]*len(self.nodelist)
         for node in self.nodelist:
             if node.is_leaf():
@@ -83,19 +79,16 @@ class ClusterTree():
         self.node_weights = pd.Series(self.node_weights)
         self.node_weights = self.node_weights/np.max(self.node_weights)
                     
-    def segment_line(self):
-        pass
-    
     def _colorpicker(self,k):
         """
         Returns an NB color to visually group similar topics in dendrogram
         
         """
         NB_colors = [(0, 123, 209),
-            (146, 34, 156),
-            (196, 61, 33),
-            (223, 147, 55),
-            (176, 210, 71)] 
+                     (146, 34, 156),
+                     (196, 61, 33),
+                     (223, 147, 55),
+                     (176, 210, 71)] 
         
         # Get flat clusters for grouping
         self.flat_clusters(n=self.colors)
@@ -109,8 +102,7 @@ class ClusterTree():
         return "#666666"
     
     def _labelpicker(self,k):
-        labels = parse_topic_labels(self.num_topics,self.params)
-        _list = labels[str(k)]
+        _list = self.labels[str(k)]
         _list.append(str(k))
         return ', '.join(_list)
         
@@ -119,7 +111,8 @@ class ClusterTree():
         Draws dendrogram
         :colors: Approx. no of color clusters in figure.
         """
-        
+        from fui.indices import parse_topic_labels
+        self.labels = parse_topic_labels(self.num_topics)
         self.colors = colors
         fig = plt.figure(figsize=(w,h)) 
         plt.title("Topic Dendrogram")
@@ -139,6 +132,8 @@ class ClusterTree():
         self.ax = plt.gca()
         
         if weight_nodes:
+            self.get_node_weights()
+            
             #assumes orientation left or right
             self.lines = []
             for (xline, yline) in zip(R['dcoord'], R['icoord']):
@@ -188,7 +183,7 @@ class ClusterTree():
        
         
         plt.tight_layout()
-        fig.savefig(os.path.join(self.params['paths']['root'],self.params['paths']['lda'], 
+        fig.savefig(os.path.join(params().paths['lda'], 
                                    'dendrogram'+str(self.num_topics)+'.pdf'), dpi=300)
 
         plt.show()
@@ -253,23 +248,3 @@ class ClusterTree():
         else:
             print('Criteria not implemented')
             return 0
-
-def parse_topic_labels(num_topics,params):
-    """
-    reads hand labeled topics from json file.
-    """
-    label_path = os.path.join(params['paths']['root'],params['paths']['topic_labels'], 
-                        'labels'+str(num_topics)+'.json')
-    with open(label_path, 'r') as f:
-        labels = json.load(f)
-    return labels             
-            
-def load_model(lda_instance, num_topics, params):
-    try:
-        folder_path = os.path.join(params['paths']['root'],params['paths']['lda'], 'lda_model_' + str(num_topics))
-        file_path = os.path.join(folder_path, 'trained_lda')
-        lda_instance.lda_model = gensim.models.LdaMulticore.load(file_path)
-        print("LDA-model with {} topics loaded".format(num_topics))
-    except FileNotFoundError:
-        print("Error: LDA-model not found")
-        lda_instance.lda_model = None

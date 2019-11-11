@@ -19,7 +19,7 @@ from multiprocessing import Pool
 import lemmy
 from langdetect import detect
 
-from src.fui.utils import timestamp
+from fui.utils import timestamp, params
 
 
 def __remove_stopwords(word_list, stopfile):
@@ -60,14 +60,14 @@ def preprocess(text, lemmatizer, stopfile='data/stopwords.txt'):
     
     return ' '.join([word for word in tokens])
 
-def print_topics(lda_instance, params, topn=30, unique_sort=True):
+def print_topics(lda_instance, topn=30, unique_sort=True):
 #    topics = lda_model.get_topics()
 #    y = pdist(topics, metric='jensenshannon')
 #    Z = hac.linkage(y, method='ward')
 #    clusters = hac.fcluster(Z, t=0.8, criterion='distance')
     lda_model = lda_instance.lda_model
     
-    csv_path = os.path.join(params['paths']['root']+params['paths']['lda'], 
+    csv_path = os.path.join(params().paths['root']+params().paths['lda'], 
                             'topic_words'+str(lda_model.num_topics)+'.csv') 
     header = ['topic_'+str(x) for x in range(lda_model.num_topics)]
     
@@ -89,7 +89,7 @@ def print_topics(lda_instance, params, topn=30, unique_sort=True):
                 csvwriter.writerow(word_lists[i])
             
     else: 
-        df = get_unique_words(lda_model, lda_instance, params, topn)
+        df = get_unique_words(lda_model, lda_instance, topn)
 
         df = df[['word']]
         df.index = pd.MultiIndex.from_arrays(
@@ -141,20 +141,20 @@ def optimize_topics(lda_instance, topics_to_optimize, plot=False, plot_title="")
         plt.plot(topics_to_optimize, coherence_scores)
         plt.xlabel('Number of topics')
         plt.ylabel('Coherence score')
-        #plot_title += str(lda_instance.params.lda['tf-idf'])
+        #plot_title += str(params().options['lda']['tf-idf'])
         #plt.title(plot_title)
         plt.show()
 
     return lda_models, coherence_scores
 
-def create_dictionary(lda_instance, params, load_bigrams=True, unwanted_words=None, keep_words=None):
+def create_dictionary(lda_instance, load_bigrams=True, unwanted_words=None, keep_words=None):
     
     # Clean and write texts to HDF
     if not lda_instance.load_processed_text():
         lda_instance.load_and_clean_body_text()
         
     # Create dictionary (id2word)
-    file_path = os.path.join(params['paths']['lda'], params['filenames']['lda_dictionary'])
+    file_path = os.path.join(params().paths['lda'], params().filenames['lda_dictionary'])
     
     # Load bigram phraser
     if load_bigrams:
@@ -168,9 +168,9 @@ def create_dictionary(lda_instance, params, load_bigrams=True, unwanted_words=No
 
         lda_instance.dictionary = gensim.corpora.Dictionary(articles for articles in lda_instance)
 
-        lda_instance.dictionary.filter_extremes(no_below=params['options']['lda']['no_below'],
-                                                no_above=params['options']['lda']['no_above'],
-                                                keep_n=params['options']['lda']['keep_n'],
+        lda_instance.dictionary.filter_extremes(no_below=params().options['lda']['no_below'],
+                                                no_above=params().options['lda']['no_above'],
+                                                keep_n=params().options['lda']['keep_n'],
                                                 keep_tokens=keep_words)
         if unwanted_words is None:
             unwanted_words = []
@@ -180,7 +180,7 @@ def create_dictionary(lda_instance, params, load_bigrams=True, unwanted_words=No
         lda_instance.dictionary.save(file_path)
     print("\t{}".format(lda_instance.dictionary))
        
-def create_corpus(lda_instance, params):
+def create_corpus(lda_instance):
     
     # Helper-class to create BoW-corpus "lazily"
     class CorpusSplitter:
@@ -199,8 +199,8 @@ def create_corpus(lda_instance, params):
     # Serialize corpus using either BoW of tf-idf
     corpus_bow = CorpusSplitter(lda_instance.test_share)
     
-    file_path = os.path.join(params['paths']['lda'], 'corpus.mm')
-    file_path_test = os.path.join(params['paths']['lda'], 'corpus_test.mm')
+    file_path = os.path.join(params().paths['lda'], 'corpus.mm')
+    file_path_test = os.path.join(params().paths['lda'], 'corpus_test.mm')
     try:
         lda_instance.TrainCorpus = gensim.corpora.MmCorpus(file_path)
         if lda_instance.test_share > 0.0:
@@ -212,7 +212,7 @@ def create_corpus(lda_instance, params):
             lda_instance.load_bigrams()
 
         # Serialize corpus (either BoW or tf-idf)
-        if not params['options']['lda']['tf-idf']:
+        if not params().options['lda']['tf-idf']:
             print("\tSerializing corpus, BoW")
             gensim.corpora.MmCorpus.serialize(file_path, corpus_bow)
             if lda_instance.test_share > 0.0:
@@ -231,12 +231,12 @@ def create_corpus(lda_instance, params):
         if lda_instance.test_share > 0.0:
             lda_instance.TestCorpus = gensim.corpora.MmCorpus(file_path_test)
 
-def save_models(lda_instance, params):
+def save_models(lda_instance):
 
     # Save all models in their respective folder
     for i, lda_model in enumerate(lda_instance.lda_models):
         try:
-            folder_path = os.path.join(params['paths']['lda'], 'lda_model_' + str(lda_model.num_topics))
+            folder_path = os.path.join(params().paths['lda'], 'lda_model_' + str(lda_model.num_topics))
             file_path = os.path.join(folder_path, 'trained_lda')
             if not os.path.exists(folder_path):
                 os.makedirs(folder_path)
@@ -248,9 +248,9 @@ def save_models(lda_instance, params):
             print("Error: List index out of range")
 
 
-def load_model(lda_instance, num_topics, params):
+def load_model(lda_instance, num_topics):
     try:
-        folder_path = os.path.join(params['paths']['root'],params['paths']['lda'], 'lda_model_' + str(num_topics))
+        folder_path = os.path.join(params().paths['root'],params().paths['lda'], 'lda_model_' + str(num_topics))
         file_path = os.path.join(folder_path, 'trained_lda')
         lda_instance.lda_model = gensim.models.LdaMulticore.load(file_path)
         print("LDA-model with {} topics loaded".format(num_topics))
@@ -258,12 +258,12 @@ def load_model(lda_instance, num_topics, params):
         print("Error: LDA-model not found")
         lda_instance.lda_model = None
         
-def load_models(lda_instance, topics, params, plot=False):
+def load_models(lda_instance, topics, plot=False):
     lda_models = []
     file_list = []
     for t in topics: 
         print(t)
-        file_list.append(os.path.join(params['paths']['root'],params['paths']['lda'], 'lda_model_'+str(t)+'\\trained_lda'))
+        file_list.append(os.path.join(params().paths['root'],params().paths['lda'], 'lda_model_'+str(t)+'\\trained_lda'))
 
 
     for f in file_list:
@@ -278,8 +278,8 @@ def load_models(lda_instance, topics, params, plot=False):
     lda_instance.lda_models = lda_models
 
     
-def docs2bow(params, sample_size=2000):
-    file_path = os.path.join(params['paths']['lda'], 'corpus.mm')
+def docs2bow(sample_size=2000):
+    file_path = os.path.join(params().paths['lda'], 'corpus.mm')
     mm = gensim.corpora.mmcorpus.MmCorpus(file_path)  # `mm` document stream now has random access
     if sample_size is not None:
         sample = [random.randint(0,mm.num_docs) for i in range(sample_size)]
@@ -296,14 +296,14 @@ def docs2bow(params, sample_size=2000):
     bow = [tuple(x) for x in df.values]
     return bow
 
-def corpus2bow(lda_instance,params):
+def corpus2bow(lda_instance):
     """
     returns test corpus in bow format: list of (word_id,word_count)
     """
     lda_instance.dictionary[1]
     bow_dict = copy.deepcopy(lda_instance.dictionary.id2token)
     bow_dict = {k: 0 for (k,v) in bow_dict.items()}
-    file_path = os.path.join(params['paths']['lda'], 'corpus_test.mm')
+    file_path = os.path.join(params().paths['lda'], 'corpus_test.mm')
     mm = gensim.corpora.mmcorpus.MmCorpus(file_path)  # `mm` document stream now has random access
     for doc in range(0,mm.num_docs,1):
         doc_dict = dict(mm[doc])
@@ -348,13 +348,13 @@ def get_word_proba(bow,lda_instance):
     test_word_proba = np.transpose(np.apply_along_axis(lambda x: x/x.sum(),0,np.array(test_word_proba)))
     return test_topics, test_word_topics, test_word_proba
 
-def jsd_measure(lda_instance,params):
+def jsd_measure(lda_instance):
     """
     returns a jensen-shannon distance measure between the empirical 
     word distribution in a holdout test corpus and the 
     distribution generated by the trained model.
     """
-    bow = corpus2bow(lda_instance,params)
+    bow = corpus2bow(lda_instance)
     test_topics, test_word_topics, test_word_proba = get_word_proba(bow,lda_instance)
     #set missing topics to zero
     if len(test_topics) is not lda_instance.lda_model.num_topics:
@@ -374,8 +374,8 @@ def jsd_measure(lda_instance,params):
     jsd = gensim.matutils.jensen_shannon(bow_pdist,model_pdist)
     return jsd
     
-def get_perplexity(lda_model, lda_instance, params, chunksize=2000):
-    file_path_test = os.path.join(params['paths']['lda'], 'corpus_test.mm')
+def get_perplexity(lda_model, lda_instance, chunksize=2000):
+    file_path_test = os.path.join(params().paths['lda'], 'corpus_test.mm')
     mm = gensim.corpora.mmcorpus.MmCorpus(file_path_test)  # `mm` document stream now has random access
     sample = [random.randint(0,mm.num_docs) for i in range(chunksize)]
     test_corpus = []
@@ -384,7 +384,7 @@ def get_perplexity(lda_model, lda_instance, params, chunksize=2000):
     perplexity = np.exp2(-lda_model.log_perplexity(test_corpus,len(lda_instance.articles)))
     return perplexity
 
-def _get_scaled_significance(lda_model, params, n_words=200):
+def _get_scaled_significance(lda_model, n_words=200):
     _cols = ['token_id', 'weight', 'topic']
     df = pd.DataFrame(data=None, columns=_cols)
     num_topics = lda_model.num_topics
@@ -400,10 +400,10 @@ def _get_scaled_significance(lda_model, params, n_words=200):
     df.sort_values(['topic','scaled_weight'],inplace=True,ascending=False)
     return df['scaled_weight']
 
-def get_unique_words(lda_model, lda_instance, params, topn=10):
+def get_unique_words(lda_model, lda_instance, topn=10):
     df_out = pd.DataFrame(data=None, columns=['scaled_weight','word'])
 
-    df = _get_scaled_significance(lda_model, params, topn)
+    df = _get_scaled_significance(lda_model, topn)
     for i in range(0,lda_model.num_topics,1):
         tokens = []
         df_topic = df[df.index.get_level_values('topic') == i]
@@ -420,7 +420,7 @@ def get_unique_words(lda_model, lda_instance, params, topn=10):
 
     return df_out
 
-def merge_documents_and_topics(filelist, lda_instance, params):
+def merge_documents_and_topics(filelist, lda_instance):
     # Load parsed articles
     print("Merging documents and LDA-topics")
     articles = pd.DataFrame()
@@ -467,8 +467,8 @@ def merge_documents_and_topics(filelist, lda_instance, params):
 #                df_enriched_lda['dates'] - df_enriched_lda['dates'].dt.weekday * timedelta(days=1)).dt.date
 
     # Save enriched documents with their topics
-    folder_path = os.path.join(params['paths']['root']+params['paths']['lda'], 'document_topics')
-    topics_path = os.path.join(folder_path, params['filenames']['lda_merge_doc_topics_file'])
+    folder_path = params().paths['doc_topics']
+    topics_path = os.path.join(folder_path, params().filenames['lda_merge_doc_topics_file'])
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
     with open(topics_path, 'wb') as f_out:
@@ -476,7 +476,7 @@ def merge_documents_and_topics(filelist, lda_instance, params):
         pickle.dump(df_enriched_lda, f_out)
 
 
-def generate_wordclouds(lda_instance, params, num_words=15):
+def generate_wordclouds(lda_instance, num_words=15):
     colors = ["#000000", "#111111", "#101010", "#121212", "#212121", "#222222"]
     cmap = LinearSegmentedColormap.from_list("mycmap", colors)
 
@@ -487,7 +487,7 @@ def generate_wordclouds(lda_instance, params, num_words=15):
     for lda_model in lda_instance.lda_models:
         print("\t{} topics...".format(lda_model.num_topics))
 
-        folder_path = os.path.join(params['paths']['lda'], 'wordclouds_' + str(lda_model.num_topics))
+        folder_path = os.path.join(params().paths['lda'], 'wordclouds_' + str(lda_model.num_topics))
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
 
@@ -544,9 +544,9 @@ def dominating_sentence_per_topic(lda_instance, lda_model, corpus):
     df_dom_sentence_sort.reset_index(drop=True, inplace=True)
 
     # Append un-processed data to df
-    files_list = get_files_list(params['paths']['parsed_news'])
+    files_list = get_files_list(params().paths['parsed_news'])
     for f in files_list:
-        with open(os.path.join(params['paths']['parsed_news'], f), 'rb') as f_in:
+        with open(os.path.join(params().paths['parsed_news'], f), 'rb') as f_in:
             df_year = pickle.load(f_in)
 
             df_dom_sentence_sort.set_index('article_id', inplace=True)
@@ -570,14 +570,14 @@ def term_frequency(corpus_bow, dictionary, terms=30):
     return counter.most_common(terms), counter.most_common()[:-terms-1:-1]
 
 
-def visualize_lda(lda_instance, params, lambda_step=0.05):
+def visualize_lda(lda_instance, lambda_step=0.05):
     from pyLDAvis import gensim
     print("Creating vis_data")
     vis_data = gensim.prepare(lda_instance.lda_model,
                               lda_instance.SerializedCorpus,
                               lda_instance.dictionary,
                               sort_topics=False, lambda_step=lambda_step)
-    pyLDAvis.save_html(vis_data, os.path.join(params['paths']['lda'], 'pyLDAvis.html'))
+    pyLDAvis.save_html(vis_data, os.path.join(params().paths['lda'], 'pyLDAvis.html'))
 
 
 def plot_descending_topic_size(lda_instance, thresholds):
@@ -632,7 +632,7 @@ def weight_of_top_words(lda_instance, top_n_words=10):
     plt.show()
 
 
-def plt_weight_words(lda_instance, params, top_n_words=20):
+def plt_weight_words(lda_instance, top_n_words=20):
 
     def split_array_in_chunks(l, n):
         return [l[i:i + n] for i in range(0, len(l), n)]
@@ -654,7 +654,7 @@ def plt_weight_words(lda_instance, params, top_n_words=20):
         plt.xticks(range(top_n_words+1)[::2])
         plt.xlim(-1, top_n_words)
 
-        folder_path = os.path.join(params['paths']['lda'], 'topic_sizes_' +
+        folder_path = os.path.join(params().paths['lda'], 'topic_sizes_' +
                                    str(lda_instance.lda_model.num_topics))
         file_path = os.path.join(folder_path, '{}.png'.format(i))
         if not os.path.exists(folder_path):

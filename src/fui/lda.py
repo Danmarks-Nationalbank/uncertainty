@@ -13,7 +13,7 @@ import json
 import lemmy
 
 from src.fui.ldatools import preprocess
-from src.fui.utils import timestamp
+from src.fui.utils import timestamp, params
 
 from collections import Counter
 from datetime import timedelta, datetime
@@ -26,24 +26,23 @@ from nltk.stem.snowball import SnowballStemmer
 
 
 class LDA:
-    def __init__(self, files_list, params, lemmatizer, test_share=0.05, test=False):
+    def __init__(self, files_list, lemmatizer, test_share=0.05, test=False):
         self.dictionary = None
         self.articles = []
         self.article_id = []
         self.SerializedCorpus = None
         self.test = test        
         self.files_list = files_list
-        self.params = params
         self.lemmatizer = lemmatizer
         self.test_share = test_share
                 
-        if self.params['options']['lda']['log']:
+        if params().options['lda']['log']:
             import logging
             try:
-                os.remove(self.params['paths']['lda']+'lda_log.txt')
+                os.remove(params().paths['lda']+'lda_log.txt')
             except (FileNotFoundError, PermissionError) as e:
                 pass
-            logging.basicConfig(filename=self.params['paths']['lda']+'lda_log.txt',
+            logging.basicConfig(filename=params().paths['lda']+'lda_log.txt',
                                 format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
             logger = logging.getLogger(__name__)
             logger.setLevel(logging.DEBUG)
@@ -68,24 +67,24 @@ class LDA:
         # Perform LDA on smaller sample, just for efficiency in case of testing...
         if self.test is True:
             random.seed(1)
-            test_idx = random.sample(range(0, len(self.articles)), self.params['options']['lda']['test_size'])
+            test_idx = random.sample(range(0, len(self.articles)), params().options['lda']['test_size'])
             self.articles = [self.articles[i] for i in test_idx]
             self.article_id = [self.article_id[i] for i in test_idx]
 
         # Pre-process LDA-docs
         if len(self.articles):
             print("\tProcessing {} documents for LDA".format(len(self.articles)))
-            with Pool(self.params['options']['threads']) as pool:
+            with Pool(params().options['threads']) as pool:
                 self.articles = pool.map(partial(preprocess, 
                                                  lemmatizer=self.lemmatizer), 
                                                  self.articles)
 
             print("\tSaving cleaned documents")
-            folder_path = self.params['paths']['lda']
+            folder_path = params().paths['lda']
             if not os.path.exists(folder_path):
                 os.makedirs(folder_path)
 
-            file_path = os.path.join(folder_path, self.params['filenames']['lda_cleaned_text'])
+            file_path = os.path.join(folder_path, params().filenames['lda_cleaned_text'])
             with h5py.File(file_path, 'w') as hf:
                 data = np.array(list(zip(self.article_id, self.articles)), dtype=object)
                 string_dt = h5py.string_dtype(encoding='utf-8')
@@ -95,7 +94,7 @@ class LDA:
 
     def load_processed_text(self):
         try:
-            with h5py.File(os.path.join(self.params['paths']['lda'], self.params['filenames']['lda_cleaned_text']), 'r') as hf:
+            with h5py.File(os.path.join(params().paths['lda'], params().filenames['lda_cleaned_text']), 'r') as hf:
                 print("Loading processed data from HDF-file")
                 hf = hf['parsed_strings'][:]
                 self.article_id = list(zip(*hf))[0]
@@ -106,17 +105,17 @@ class LDA:
             return 0
     
     def load_bigrams(self):
-        if os.path.isfile(os.path.join(self.params['paths']['lda'],'phrases.pkl')):
-            phrases = gensim.utils.SaveLoad.load(os.path.join(self.params['paths']['lda'],'phrases.pkl'))
+        if os.path.isfile(os.path.join(params().paths['lda'],'phrases.pkl')):
+            phrases = gensim.utils.SaveLoad.load(os.path.join(params().paths['lda'],'phrases.pkl'))
             self.bigram_phraser = gensim.models.phrases.Phraser(phrases)
             print("Bigram phraser loaded")
         else:
             print("Bigram phraser not found, training")
-            with h5py.File(os.path.join(self.params['paths']['lda'], self.params['filenames']['lda_cleaned_text']), 'r') as hf:
+            with h5py.File(os.path.join(params().paths['lda'], params().filenames['lda_cleaned_text']), 'r') as hf:
                 hf = hf['parsed_strings'][:]
                 articles_to_phrasing  = [a[1].split() for a in hf]
-            phrases = gensim.models.phrases.Phrases(articles_to_phrasing, self.params['options']['lda']['no_below'], threshold=100)
-            phrases.save(os.path.join(self.params['paths']['lda'],'phrases.pkl'), separately=None, sep_limit=10485760, ignore=frozenset([]), pickle_protocol=2)
+            phrases = gensim.models.phrases.Phrases(articles_to_phrasing, params().options['lda']['no_below'], threshold=100)
+            phrases.save(os.path.join(params().paths['lda'],'phrases.pkl'), separately=None, sep_limit=10485760, ignore=frozenset([]), pickle_protocol=2)
             self.bigram_phraser = gensim.models.phrases.Phraser(phrases)
             print("Bigram phraser loaded")
         

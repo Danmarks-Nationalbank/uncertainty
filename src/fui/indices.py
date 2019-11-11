@@ -7,95 +7,70 @@ sys.path.insert(1, 'D:\\projects\\FUI\\env\\Lib\\site-packages')
 sys.path.insert(1, 'C:\\Users\\EGR\\AppData\\Roaming\\Python\\Python37\\site-packages')
 import pickle
 import numpy as np
-from nltk.stem.snowball import SnowballStemmer
-import copy
-from gensim.models import KeyedVectors
-import codecs
 import json
 import glob
-import re
 import gensim
 import pandas as pd
 from multiprocessing import Pool
 from functools import partial
 from matplotlib import pyplot as plt
 import matplotlib.dates as mdates
-import matplotlib.patches as patches
+#import matplotlib.patches as patches
 from cycler import cycler
 
-from src.fui.cluster import ClusterTree
-from src.fui.utils import main_directory
-from src.fui.utils import dump_pickle
+from fui.bloom import extend_dict_w2v, _stemtext
+from fui.cluster import ClusterTree
+from fui.utils import main_directory, dump_pickle, params
 
-def parse_topic_labels(num_topics,params):
+def validation(idx,start_year=2000,end_year=2019):
+    if end_year == 2019:
+        end_str = '-05-31'
+    else:
+        end_str = ''
+
+    
+    data = pd.read_csv(params().paths['input']+'validation.csv',header=0)
+    data['date'] = pd.to_datetime(data['date'],format="%Ym%m") + pd.tseries.offsets.MonthEnd(1)
+    data = data.set_index('date')
+    
+    vix = pd.read_csv(params().paths['input']+'v1x_monthly.csv', 
+                      names=['date','vix'], header=0)
+    vix['date'] = pd.to_datetime(vix['date'])
+    vix.set_index('date', inplace=True)
+    vix.columns = vix.columns.get_level_values(0)
+    vix = vix[str(start_year):str(end_year)+end_str]   
+    vix['vix'] = normalize(vix['vix'])
+    
+    idx = idx.filter(regex='_norm',axis=1)
+    
+    corr = {}
+    for var in data.columns:
+        data[var] = normalize(data[var])
+        corr[var] = (_calc_corr(idx,data[var]),_calc_corr(vix,data[var]))
+    return corr
+
+def parse_topic_labels(num_topics):
     """
     reads hand labeled topics from json file.
     
     """
-    label_path = os.path.join(params['paths']['root'],params['paths']['topic_labels'], 
+    label_path = os.path.join(params().paths['topic_labels'], 
                         'epu'+str(num_topics)+'.json')
     with open(label_path, 'r') as f:
         labels = json.load(f)
     return labels             
             
-def load_model(lda_instance, num_topics, params):
+def load_model(lda_instance, num_topics):
     try:
-        folder_path = os.path.join(params['paths']['root'],params['paths']['lda'], 'lda_model_' + str(num_topics))
+        folder_path = os.path.join(params().paths['root'],params().paths['lda'], 'lda_model_' + str(num_topics))
         file_path = os.path.join(folder_path, 'trained_lda')
         lda_instance.lda_model = gensim.models.LdaMulticore.load(file_path)
         print("LDA-model with {} topics loaded".format(num_topics))
     except FileNotFoundError:
         print("Error: LDA-model not found")
         lda_instance.lda_model = None
-
-def extend_dict_w2v(dict_name, params, n_words=10):
-    """
-    Extends bloom dictionary with similar words using a pre-trained
-    embedding. Default model: https://fasttext.cc/docs/en/crawl-vectors.html
-    args:
-    params: input_params.json
-    dict_name: name of Bloom dict in params
-    n_words: include n_nearest words to subject word.
-    """
-    
-    model = KeyedVectors.load_word2vec_format(params['paths']['root']+
-                                              params['paths']['w2v_model'], binary=False)
-    print("Model loaded")
-    dict_out = copy.deepcopy(params[dict_name])
-    for k, v in params[dict_name].items():
-        for val in v:
-            #print('\n'+v)
-            try:
-                similar_words = [w[0] for w in model.most_similar(positive=val, topn=n_words)]
-                dict_out[k].extend(_check_stem_duplicates(similar_words))
-                #print('\n',model.most_similar(positive=v))
-            except KeyError:
-                continue
-    return dict_out
-            
-def _check_stem_duplicates(word_list):
-    """
-    Stems list of words and removes any resulting duplicates
-    """
-    stemmer = SnowballStemmer("danish")
-    stemmed_list = [stemmer.stem(word) for word in word_list]
-    #remove duplicates after stemming
-    stemmed_list = list(dict.fromkeys(stemmed_list))
-    return stemmed_list
-
-def _stemtext(text, min_len=2, max_len=25):
-    # Remove any non-alphabetic character, split by space
-    stemmer = SnowballStemmer("danish")
-    pat = re.compile('(((?![\d])\w)+)', re.UNICODE)
-
-    text = text.lower()
-    list_to_stem = []
-    list_to_stem = [match.group() for match in pat.finditer(text)]
-    
-    stemmed_list = [stemmer.stem(word) for word in list_to_stem if len(word) >= min_len and len(word) <= max_len]
-    return stemmed_list
-
-def uncertainty_count(params, dict_name='uncertainty', extend=True):
+          
+def uncertainty_count(dict_name='uncertainty', extend=True):
     """
     Finds for articles containing words in bloom dictionary. Saves result to disk.
     args:
@@ -103,18 +78,15 @@ def uncertainty_count(params, dict_name='uncertainty', extend=True):
     logic: matching criteria in params
     """
  
-    out_path = params['paths']['root']+params['paths']['parsed_news']
-    if not os.path.exists(out_path):
-        os.makedirs(out_path)        
-    
+    out_path = params().paths['parsed_news']
+ 
     if extend:
-        U_set = set(list(extend_dict_w2v(dict_name, params, n_words=10).values())[0])
+        U_set = set(list(extend_dict_w2v(dict_name, n_words=10).values())[0])
     else:
-        U_set = set(list(params[dict_name].values())[0])
+        U_set = set(list(params().dicts[dict_name].values())[0])
 
     #get parsed articles
-    filelist = glob.glob(params['paths']['root']+
-                         params['paths']['parsed_news']+'boersen*.pkl') 
+    filelist = glob.glob(params().paths['parsed_news']+'boersen*.pkl') 
     yearlist = [f[-8:-4] for f in filelist]
 
     for (i,f) in enumerate(filelist):
@@ -146,23 +118,21 @@ def _count(word_list, word_set):
             count += 1
     return count
     
-def load_parsed_data(params, sample_size=None):
-    filelist = glob.glob(params['paths']['root']+
-                         params['paths']['parsed_news']+'u_count*.pkl') 
+def load_u_count(sample_size=0):
+    filelist = glob.glob(params().paths['parsed_news']+'u_count*.pkl') 
     df = pd.DataFrame()
     for f in filelist:    
         with open(f, 'rb') as f_in:
             df_n = pickle.load(f_in)
             df = df.append(df_n)
-    if sample_size is not None:
+    if sample_size > 0:
         return df.sample(sample_size)
     else:
         return df
     
-def merge_lda_u(params):
-    df_u = load_parsed_data(params)
-    with open(params['paths']['root']+
-              params['paths']['lda']+'\\document_topics\\document_topics.pkl', 'rb') as f:
+def merge_lda_u():
+    df_u = load_u_count()
+    with open(params().paths['doc_topics']+'document_topics.pkl', 'rb') as f:
         df = pickle.load(f)
 
     df = df.merge(df_u, 'inner', 'article_id')
@@ -171,17 +141,21 @@ def merge_lda_u(params):
 
     return df
 
-def load_doc_topics(params):
-    with open(params['paths']['root']+
-              params['paths']['lda']+'\\document_topics\\document_topics.pkl', 'rb') as f:
+def load_doc_topics():
+    with open(params().paths['doc_topics']+'document_topics.pkl', 'rb') as f:
         df = pickle.load(f)
-    return df.sample(20000)
+    return df
     
-def _aggregate(df, col, aggregation=['M'], normalize=True):
+def _aggregate(df, col, aggregation=['M'], normalize=True,
+               start_year=2000, end_year=2019):
     """
     aggregates to means within 
     each aggregation frequency
     """
+    if end_year == 2019:
+        end_str = '-05-31'
+    else:
+        end_str = ''
 
     agg_dict = {}
     for f in aggregation:
@@ -190,11 +164,13 @@ def _aggregate(df, col, aggregation=['M'], normalize=True):
         ).agg(['mean']).reset_index()
         
         idx.set_index('ArticleDateCreated', inplace=True)
+        idx.index = idx.index.rename('date')
+        idx = idx[str(start_year):str(end_year)+end_str]   
 
         if normalize:
             #normalize to mean = 0, std = 1
             idx.columns = idx.columns.get_level_values(0)
-            idx[(col+'_norm')]=(idx[col]-idx[col].mean())/idx[col].std()
+            idx[(col+'_norm')]=normalize(idx[col])
             
         #dump_csv(folder_path,var+'_score_'+f+'.csv',idx)
         agg_dict[f] = idx
@@ -204,7 +180,7 @@ def _aggregate(df, col, aggregation=['M'], normalize=True):
         return agg_dict
     
 def plot_index(
-    out_path, idx, params, idx_name, plot_vix=True, start_year=2000, end_year=2019):
+    out_path, idx, idx_name, plot_vix=True, start_year=2000, end_year=2019):
     """
     """
     define_NB_colors()
@@ -216,7 +192,7 @@ def plot_index(
     else:
         end_str = ''
     
-    vix = pd.read_csv(params['paths']['root']+'data/v1x_monthly.csv', 
+    vix = pd.read_csv(params().paths['input']+'v1x_monthly.csv', 
                       names=['date','vix'], header=0)
     vix['date'] = pd.to_datetime(vix['date'])
     vix.set_index('date', inplace=True)
@@ -244,14 +220,14 @@ def plot_index(
     fig.savefig(f'{out_path}\\[idx_name]_plot.png', dpi=300)
     return corr, fig, ax
 
-def ECB_index(params,df,cat=['P','F'],num_topics=80,use_weights=False,
+def ECB_index(df,cat=['P','F'],num_topics=80,use_weights=False,
               threshold=0.0,req_all=False):
     
     if threshold < 0.0:
         print("No negative thresholds.")
         return 0
     
-    label_dict = parse_topic_labels(num_topics,params)
+    label_dict = parse_topic_labels(num_topics)
     labels = pd.DataFrame.from_dict(label_dict,orient='index',columns=['cat','region'])
     labels['topic'] = labels.index.astype('int64')
     labels.fillna(value='N/A', inplace=True)
@@ -285,12 +261,13 @@ def ECB_index(params,df,cat=['P','F'],num_topics=80,use_weights=False,
         idx = _aggregate(df,idx_name)
         return idx
 
-def intersection_index(params,df,cat=['P','F'],num_topics=80,threshold=0.0,exclude_dk=True):
+def intersection_index(df,cat=['P','F'],num_topics=80,threshold=0.0,exclude_dk=False, 
+                       start_year=2000, end_year=2019, u_weight=False):
     if threshold < 0.0:
         print("No negative thresholds.")
         return 0
     
-    label_dict = parse_topic_labels(num_topics,params)
+    label_dict = parse_topic_labels(num_topics)
     labels = pd.DataFrame.from_dict(label_dict,orient='index',columns=['cat','region'])
     labels['topic'] = labels.index.astype('int64')
     labels.fillna(value='N/A', inplace=True)
@@ -300,17 +277,21 @@ def intersection_index(params,df,cat=['P','F'],num_topics=80,threshold=0.0,exclu
                     lambda x : bool(set([x]).intersection(set([c]))))
                     ].index.tolist()
         if exclude_dk:
-            region_idx = labels.index.values[labels['region'] is not 'DK'].tolist()
+            region_idx = labels.index.values[labels['region'] != 'DK'].tolist()
         else:
             region_idx = topic_idx
             
         df[c] = df['topics'].apply(_topic_weights, args=(topic_idx,region_idx,0.0))
-#    df['in_idx'] = (df[cat] > threshold).all(1).astype(int)*df
-    df['in_idx'] = df.loc[:, cat].prod(axis=1)       
+    #df['in_idx'] = (df[cat] > threshold).all(1).astype(int)
 
-    idx = _aggregate(df,'in_idx')
-    return idx
+    df['in_idx'] = df.loc[:, cat].prod(axis=1)*1000*(df[cat] > 0.01).all(1).astype(int) 
     
+    if u_weight:
+        df['in_idx'] = df['in_idx']*df['u_count']
+    
+    idx = _aggregate(df,'in_idx',start_year=start_year,end_year=end_year)
+    return idx
+ 
 def _topic_weights(topic_weights,topic_idx,region_idx,threshold):
     if threshold > 0.0:
         psum = np.array(
@@ -340,21 +321,14 @@ def normalize(series):
     return (series-series.mean())/series.std()
 
 def _calc_corr(df1,df2):
-    df1 = df1.join(df2, how='inner')
+    df1 = df1.join(df2, how='inner', on='date')
     corr_mat = pd.np.corrcoef(df1.iloc[:,0].tolist(), df1.iloc[:,1].tolist())
-    print(corr_mat)
     return corr_mat[0,1]
     
 if __name__ == '__main__':
  
-    os.chdir(main_directory())
-    
-    PARAMS_PATH = 'scripts/input_params.json'
-    with codecs.open(PARAMS_PATH, 'r', 'utf-8-sig') as json_file:  
-        params = json.load(json_file)
-    
-    #uncertainty_count(params)
-    #df = merge_lda_u(params)
+    #uncertainty_count()
+    df = merge_lda_u()
     
     #idx = ECB_index(params,df,use_weights=True)
     #idx2 = ECB_index(params,df,use_weights=True,threshold=2e-04)
@@ -362,17 +336,12 @@ if __name__ == '__main__':
     #idx = ECB_index(params,df,use_weights=True,threshold=2e-04)
     #df2 = df.sample(10000)
     #df = load_doc_topics(params)
-    cl80=ClusterTree(80,params)
-    #cl80.get_topic_sums(df)
-    cl80.get_node_weights(df)
-    cl80.node_weights
-    fig, ax, R = cl80.dendrogram()
-        
-    
-#    in_idx = intersection_index(params,df)
-#    
-#    plot_index(params['paths']['root']+params['paths']['lda'],
-#               in_idx, params, 'in_idx_norm')
+    #cl80 = ClusterTree(80,params)
+    #cl80.dendrogram()
+
+    idx = intersection_index(df,threshold=0.3,exclude_dk=False,u_weight=False)
+    val = validation(idx)
+    plot_index(params().paths['lda'], idx, 'in_idx_norm')
 #    NB_blue = '#007bd1'
 #    fig = plt.figure(figsize=(5, 5))
 #    ax = fig.add_subplot(111)

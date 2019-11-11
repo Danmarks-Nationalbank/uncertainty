@@ -6,6 +6,7 @@ import os
 import shutil
 import datetime
 import pickle
+import codecs
 
 def main_directory():
     """
@@ -68,18 +69,18 @@ def timestamp():
     return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-def params(ls_paths=['scripts_CENSOR', 'input_params.json'], reset=False):
+def params(ls_paths=['scripts', 'input_params.json'], reset=False):
     """
-    Function for loading parameters for the entire workflow relative to \\news_analytics\\
+    Function for loading parameters for the entire workflow relative to \\FUI\\
     """
 
     if reset is True:
         _Singleton._instance = None
 
     if _Singleton._instance is None:
-        input_file = os.path.abspath(os.path.join(__file__, '..', '..', '..', '..', *ls_paths))
+        input_file = os.path.abspath(os.path.join(__file__, '..', '..', '..', *ls_paths))
         try:
-            with open(input_file) as f:
+            with codecs.open(input_file, 'r', encoding='utf-8-sig') as f:
                 input_json = json.load(f)
                 _Singleton._instance = _Singleton(input_json)
         except FileNotFoundError as e:
@@ -94,6 +95,7 @@ class _Singleton:
         input_path = os.path.abspath(os.path.join(__file__, '..', '..', '..'))
         self.filenames = input_json['filenames']
         self.options = input_json['options']
+        self.dicts = input_json['dicts']
         self.paths = {key: os.path.join(input_path, path) for key, path in input_json['paths'].items()}
         for _, folder_path in self.paths.items():
             if not os.path.exists(folder_path):

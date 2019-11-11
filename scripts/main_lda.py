@@ -17,35 +17,29 @@ import pickle
 import glob
 from matplotlib import pyplot as plt
 
-from src.fui.lda import LDA
-from src.fui.utils import main_directory, dump_pickle, dump_csv, define_NB_colors
-from src.fui.ldatools import preprocess, optimize_topics, create_dictionary, create_corpus, save_models, load_model, load_models
-from src.fui.ldatools import generate_wordclouds, merge_documents_and_topics
-from src.fui.ldatools import get_unique_words, jsd_measure
-from src.fui.ldatools import print_topics
-from src.fui.preprocessing import parse_raw_data, load_parsed_data
+from fui.lda import LDA
+from fui.utils import main_directory, dump_pickle, dump_csv, define_NB_colors, params
+from fui.ldatools import preprocess, optimize_topics, create_dictionary, create_corpus, save_models, load_model, load_models
+from fui.ldatools import generate_wordclouds, merge_documents_and_topics
+from fui.ldatools import get_unique_words, jsd_measure
+from fui.ldatools import print_topics
+from fui.preprocessing import parse_raw_data, load_parsed_data
 
 if __name__ == "__main__":
-    os.chdir(main_directory())
-    PARAMS_PATH = 'scripts/input_params.json'
+
     NROWS = None
     topics = [65,68,70,72,75,78,80,85,88]
     
-#    with open(PARAMS_PATH, encoding='utf8') as json_params:
-#        params = json.load(json_params)
-    with codecs.open(PARAMS_PATH, 'r', 'utf-8-sig') as json_file:  
-        params = json.load(json_file)
-    
+
 #    parse_raw_data(params, nrows=None)
     
-    filelist = glob.glob(params['paths']['root']+
-                         params['paths']['parsed_news']+'boersen*.pkl') 
+    filelist = glob.glob(params().paths['parsed_news']+'boersen*.pkl') 
 #
     lemmatizer = lemmy.load("da")
     lda_instance = LDA(filelist, params, lemmatizer, test_share=0.02)
 #    
-    create_dictionary(lda_instance, params, load_bigrams=False)
-    create_corpus(lda_instance, params)
+    create_dictionary(lda_instance, load_bigrams=False)
+    create_corpus(lda_instance)
 #
 ##    lda_instance.lda_models, coherence_scores = optimize_topics(lda_instance, topics, plot=False)
 ##    save_models(lda_instance, params)
@@ -54,7 +48,7 @@ if __name__ == "__main__":
     load_model(lda_instance, 80, params)
 #
 #        
-    print_topics(lda_instance,params,topn=40,unique_sort=True)
+    print_topics(lda_instance,topn=40,unique_sort=True)
 #    
 #    jsd = []
 #    for topic in topics:

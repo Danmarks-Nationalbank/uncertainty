@@ -4,8 +4,10 @@
         "enriched_text": "data\\intermediate\\enriched_news\\",
         "firm_events": "data\\intermediate\\firm_events\\",
 		"lda": "data\\intermediate\\lda\\",
-		"topic_labels": "data\\intermediate\\lda\\topic_labels",
+		"doc_topics": "data\\intermediate\\lda\\document_topics\\",
+		"topic_labels": "data\\intermediate\\lda\\topic_labels\\",
         "boersen_articles": "data\\input\\",
+		"input": "data\\input\\",
         "parsed_news": "data\\intermediate\\parsed_news\\",
 		"w2v_model": "data\\wiki.da.vec",
 		"bloom": "data\\bloom\\"
@@ -16,31 +18,27 @@
 		"lda_cleaned_text": "parsed_strings.hdf5",
 		"lda_dictionary": "dictionary.pkl",
 		"lda_merge_doc_topics_file": "document_topics.pkl",
-        "market_data": ["StockMarketData_1996to1999Cleaned.txt", "StockMarketData_2000to2004Cleaned.txt", "StockMarketData_2005to2009Cleaned.txt", "StockMarketData_2010to2014Cleaned.txt", "StockMarketData_2015to2019Cleaned.txt"],
 		"parsed_news": "boersen_parsed"
 	},
-	"bloom": {
-		"economic": ["erhverv", "forretning", "handel", "økonomi", "økonomisk"],
-		"political": ["politik", "regulering", "skat", "udgift", "underskud", "nationalbank", "folketing", "regering"],
-		"uncertainty": ["usik", "usikker"]
-	},
-	"bloom_extended": {
-		"economic": ["erhverv", "forretning", "handel", "økonomi", "økonomisk"],
-		"political": ["politik", "regulering", "skat", "udgift", "underskud", "nationalbank", "folketing", "regering", "ECB", "Washington", "EU", "Bruxelles", "Bryssel"],
-		"uncertainty": ["usik", "usikker", "uvis", "mistro"]
-	},
-	"uncertainty": {
-		"uncertainty": ["usik", "usikker", "uvis", "mistro"]
-	},
-	"bloom_extended_unstem": {
-		"economic": ["erhverv", "forretning", "handel", "økonomi", "økonomisk"],
-		"political": ["politik", "regulering", "skat", "udgift", "underskud", "nationalbanken", "folketinget", "regeringen", "ECB", "Washington", "EU", "Bruxelles", "Bryssel"],
-		"uncertainty": ["usikkerhed", "usikker", "uvis", "mistro"]
-	},
-	"topics20": {
-		"economic": [1,3,6,8],
-		"political": [2,5,16],
-		"uncertainty": ["usikkerhed", "usikker", "uvis", "mistro"]
+	"dicts": {
+		"bloom": {
+			"economic": ["erhverv", "forretning", "handel", "økonomi", "økonomisk"],
+			"political": ["politik", "regulering", "skat", "udgift", "underskud", "nationalbank", "folketing", "regering"],
+			"uncertainty": ["usik", "usikker"]
+		},
+		"bloom_extended": {
+			"economic": ["erhverv", "forretning", "handel", "økonomi", "økonomisk"],
+			"political": ["politik", "regulering", "skat", "udgift", "underskud", "nationalbank", "folketing", "regering", "ECB", "Washington", "EU", "Bruxelles", "Bryssel"],
+			"uncertainty": ["usik", "usikker", "uvis", "mistro"]
+		},
+		"uncertainty": {
+			"uncertainty": ["usik", "usikker", "uvis", "mistro"]
+		},
+		"bloom_extended_unstem": {
+			"economic": ["erhverv", "forretning", "handel", "økonomi", "økonomisk"],
+			"political": ["politik", "regulering", "skat", "udgift", "underskud", "nationalbanken", "folketinget", "regeringen", "ECB", "Washington", "EU", "Bruxelles", "Bryssel"],
+			"uncertainty": ["usikkerhed", "usikker", "uvis", "mistro"]
+		}
 	},
 	"options": {
 		"bloom_logic": {
@@ -50,9 +48,10 @@
 			"PandU": "bool(bloom_P & stem_set) and bool(bloom_U & stem_set)",
 			"U": "bool(bloom_U & stem_set)"
 		},
+		"bloom_logic_weighted": "bool(bloom_E & stem_set) and bool(bloom_P & stem_set)",
 		"lda": {
 			"features": ["LM_negative", "LM_positive", "VD_neg", "VD_pos", "VD_compound", "PC_negative", "PC_difference"],
-			"log": 1,
+			"log": 0,
 			"keep_n": 100000,
 			"no_above": 0.50,
 			"no_below": 100,

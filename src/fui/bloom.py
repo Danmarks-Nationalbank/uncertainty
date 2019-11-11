@@ -15,9 +15,9 @@ import copy
 import os
 import glob
 
-from fui.utils import dump_pickle, dump_csv
+from fui.utils import dump_pickle, dump_csv, params
 
-def extend_dict_w2v(dict_name, params, n_words=10):
+def extend_dict_w2v(dict_name, n_words=10):
     """
     Extends bloom dictionary with similar words using a pre-trained
     embedding. Default model: https://fasttext.cc/docs/en/crawl-vectors.html
@@ -27,11 +27,10 @@ def extend_dict_w2v(dict_name, params, n_words=10):
     n_words: include n_nearest words to subject word.
     """
     
-    model = KeyedVectors.load_word2vec_format(params['paths']['root']+
-                                              params['paths']['w2v_model'], binary=False)
+    model = KeyedVectors.load_word2vec_format(params().paths['w2v_model'], binary=False)
     print("Model loaded")
-    dict_out = copy.deepcopy(params['bloom'])
-    for k, v in params[dict_name].items():
+    dict_out = copy.deepcopy(params().dicts[dict_name])
+    for k, v in params().dicts[dict_name].items():
         for val in v:
             #print('\n'+v)
             try:
@@ -51,8 +50,20 @@ def _check_stem_duplicates(word_list):
     #remove duplicates after stemming
     stemmed_list = list(dict.fromkeys(stemmed_list))
     return stemmed_list
-        
-def bloom_measure(params, dict_name, logic, start_year=2000, end_year=2019, weighted=False):
+
+def _stemtext(text, min_len=2, max_len=25):
+    # Remove any non-alphabetic character, split by space
+    stemmer = SnowballStemmer("danish")
+    pat = re.compile('(((?![\d])\w)+)', re.UNICODE)
+
+    text = text.lower()
+    list_to_stem = []
+    list_to_stem = [match.group() for match in pat.finditer(text)]
+    
+    stemmed_list = [stemmer.stem(word) for word in list_to_stem if len(word) >= min_len and len(word) <= max_len]
+    return stemmed_list
+
+def bloom_measure(bloom_dict, name, logic, start_year=2000, end_year=2019, weighted=False):
     """
     Finds for articles containing words in bloom dictionary. Saves result to disk.
     args:
@@ -60,20 +71,17 @@ def bloom_measure(params, dict_name, logic, start_year=2000, end_year=2019, weig
     dict_name: name of bloom dict in params
     logic: matching criteria in params
     """
-    out_path = params['paths']['root']+params['paths']['bloom']+dict_name+'\\'+logic
+    out_path = params().paths['bloom']+name+'\\'+logic
     if not os.path.exists(out_path):
         os.makedirs(out_path)        
     
-    b_E, b_P, b_U = _get_bloom_sets(params[dict_name])
-    logic_str = params['options']['bloom_logic'][logic]
-    print('\nLogic: '+logic_str)
+    b_E, b_P, b_U = _get_bloom_sets(bloom_dict)
     print('\n\nEconomic words: ' + repr(b_E) +
           '\n\n Political words: ' + repr(b_P) +
           '\n\n Uncertainty words: ' + repr(b_U))
     
     #get parsed articles
-    filelist = glob.glob(params['paths']['root']+
-                         params['paths']['parsed_news']+'boersen*.pkl') 
+    filelist = glob.glob(params().paths['parsed_news']+'boersen*.pkl') 
     filelist = [(f,int(f[-8:-4])) for f in filelist 
                 if int(f[-8:-4]) >= start_year and int(f[-8:-4]) <= end_year]
     for f in filelist:
@@ -88,7 +96,9 @@ def bloom_measure(params, dict_name, logic, start_year=2000, end_year=2019, weig
         with Pool() as pool:
             df['body_stemmed'] = pool.map(_stemtext, 
                                           df['ArticleContents'].values.tolist())
-        if not weighted:    
+        if not weighted:
+            logic_str = params().options['bloom_logic'][logic]
+            print('\nLogic: '+logic_str)
             #compare to dictionary
             with Pool() as pool:
                 df['bloom'] = pool.map(partial(_bloom_compare, 
@@ -101,8 +111,8 @@ def bloom_measure(params, dict_name, logic, start_year=2000, end_year=2019, weig
             #save to disk
             dump_pickle(out_path,'bloom'+str(f[1])+'.pkl',df[['article_id','bloom','ArticleDateCreated']])
         else:
-            logic_str = "bool(bloom_E & stem_set) and bool(bloom_P & stem_set)"
-            df_u = load_uncertainty_count(params, f[1])
+            logic_str = params().options['bloom_logic_weighted']
+            df_u = load_uncertainty_count(f[1])
             df = df.merge(df_u[['u_count','article_id']], how='left', on='article_id')
             with Pool() as pool:
                 df['bloomEP'] = pool.map(partial(_bloom_compare, 
@@ -115,7 +125,7 @@ def bloom_measure(params, dict_name, logic, start_year=2000, end_year=2019, weig
             dump_pickle(out_path,'bloom'+str(f[1])+'_weighted.pkl',df[['article_id','bloom','bloomEP','u_count','ArticleDateCreated']])
 
             
-def _aggregate(folder_path, params, aggregation=['W','M','Q']):
+def _aggregate(folder_path, aggregation=['W','M','Q']):
     list_bloom = glob.glob(folder_path+'\\*.pkl')
     """
     loads saved bloom pickles and aggregates to means within 
@@ -144,15 +154,15 @@ def _aggregate(folder_path, params, aggregation=['W','M','Q']):
         agg_dict[f] = bloom_idx
     return agg_dict
 
-def load_uncertainty_count(params, year):
-    file_path = params['paths']['root']+params['paths']['parsed_news']+'u_count'+str(year)+'.pkl'
+def load_uncertainty_count(year):
+    file_path = params().paths['parsed_news']+'u_count'+str(year)+'.pkl'
        
     with open(file_path, 'rb') as f_in:
         df = pickle.load(f_in)
     return df
         
 def plot_index(
-    out_path, df_dict, params, plot_vix=True, freq='M', start_year=2012, end_year=2019):
+    out_path, df_dict, plot_vix=True, freq='M', start_year=2012, end_year=2019):
     """
     """
     define_NB_colors()
@@ -164,21 +174,20 @@ def plot_index(
     else:
         end_str = ''
     
-    vix = pd.read_csv(params['paths']['root']+'data/vixcurrent.csv', 
-                      usecols=[0,4], names=['date','vix'], header=0)
+    vix = pd.read_csv(params().paths['input']+'v1x_monthly.csv', 
+                      names=['date','vix'], header=0)
     vix['date'] = pd.to_datetime(vix['date'])
     vix.set_index('date', inplace=True)
-    vix = vix.resample(freq).mean()
     vix.columns = vix.columns.get_level_values(0)
     vix = vix[str(start_year):str(end_year)+end_str]   
-    vix['vix'] = normalize(vix['vix'])
+    vix['vix'] = normalize(vix['vix'])    
     
     df_dict[freq] = df_dict[freq][str(start_year):str(end_year)+end_str]
     
     fig, ax = plt.subplots(figsize=(14,6))
     ax.plot(df_dict[freq].index, df_dict[freq].bloom_norm, label='Børsen Uncertainty Index')
     if plot_vix:
-        ax.plot(vix.index, vix.vix, label='VIX')
+        ax.plot(vix.index, vix.vix, label='VDAX')
     ax.legend(frameon=False, loc='upper left')    
 
     ax.xaxis.set_major_locator(years)
@@ -217,17 +226,8 @@ def define_NB_colors():
 def normalize(series):
     return (series-series.mean())/series.std()
 
-def _stemtext(text):
-    # Remove any non-alphabetic character, split by space
-    regex = re.compile('[^ÆØÅæøåa-zA-Z -]')
-    list_to_stem = regex.sub('', text).split()
-
-    # stem each word and join
-    stemmer = SnowballStemmer("danish")
-    stem_set = set([stemmer.stem(word) for word in list_to_stem])
-    return stem_set
-
-def _bloom_compare(stem_set, logic, bloom_E, bloom_P, bloom_U):          
+def _bloom_compare(word_list, logic, bloom_E, bloom_P, bloom_U):  
+    stem_set = set(word_list)        
     return eval(logic)
 
 def _get_bloom_sets(bloom_dict):
