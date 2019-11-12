@@ -8,7 +8,6 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from nltk.stem.snowball import SnowballStemmer
-from gensim.models import KeyedVectors
 from cycler import cycler
 
 import copy

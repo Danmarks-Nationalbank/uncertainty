@@ -7,16 +7,16 @@ import re
 import warnings
 import glob
 import html
-from src.fui.utils import dump_pickle
+from src.fui.utils import dump_pickle, params
 
-def parse_raw_data(params, nrows=None):
+def parse_raw_data(nrows=None):
     """
     Loads the data from CSV and performs some basic cleaning. Essentially the
     cleaning removes corrupted lines.
     """
     # Load the data
     csvpath = \
-        params['paths']['root']+params['paths']['boersen_articles']+params['filenames']['boersen_csv']
+        params().paths['boersen_articles']+params().filenames['boersen_csv']
     df = pd.read_csv(csvpath, sep=';', encoding='UTF-16', error_bad_lines=False, nrows=nrows)
     
     print('Dropping articles with NaN content...')
@@ -88,7 +88,7 @@ def parse_raw_data(params, nrows=None):
         df_year['word_count'] = df_year['ArticleContents'].str.count(' ') + 1
         df_year = df_year[df_year.word_count >= 50] 
         print('Columns: ', df_year.columns)
-        dump_pickle(params['paths']['root']+params['paths']['parsed_news'],params['filenames']['parsed_news']+'_'+str(year)+'.pkl',df_year)
+        dump_pickle(params().paths['parsed_news'],params().filenames['parsed_news']+'_'+str(year)+'.pkl',df_year)
 
 def __clean_text(series):
     """
@@ -129,9 +129,8 @@ def __clean_text(series):
     
     return series
 
-def load_parsed_data(params, sample_size=None):
-    filelist = glob.glob(params['paths']['root']+
-                         params['paths']['parsed_news']+'boersen*.pkl') 
+def load_parsed_data(sample_size=None):
+    filelist = glob.glob(params().paths['parsed_news']+'boersen*.pkl') 
     df = pd.DataFrame()
     for f in filelist:    
         with open(f, 'rb') as f_in:

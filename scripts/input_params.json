@@ -10,7 +10,7 @@
 		"input": "data\\input\\",
         "parsed_news": "data\\intermediate\\parsed_news\\",
 		"w2v_model": "data\\wiki.da.vec",
-		"bloom": "data\\bloom\\"
+		"indices": "data\\indices\\"
 	},
 	"filenames": {
 		"boersen_csv": "Nat_bank_articles.csv",
