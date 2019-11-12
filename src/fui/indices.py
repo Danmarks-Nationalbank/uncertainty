@@ -217,7 +217,7 @@ def merge_lda_u(extend=True):
             df = pickle.load(f)
         return df
     except FileNotFoundError:
-        df_u = load_u_count(extend)
+        df_u = load_u_count(extend=extend)
         with open(params().paths['doc_topics']+'document_topics.pkl', 'rb') as f:
             df = pickle.load(f)
     
