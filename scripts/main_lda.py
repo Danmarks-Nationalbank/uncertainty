@@ -36,7 +36,7 @@ if __name__ == "__main__":
     filelist = glob.glob(params().paths['parsed_news']+'boersen*.pkl') 
 #
     lemmatizer = lemmy.load("da")
-    lda_instance = LDA(filelist, params, lemmatizer, test_share=0.02)
+    lda_instance = LDA(filelist, lemmatizer, test_share=0.02)
 #    
     create_dictionary(lda_instance, load_bigrams=False)
     create_corpus(lda_instance)
@@ -45,10 +45,10 @@ if __name__ == "__main__":
 ##    save_models(lda_instance, params)
 ###    
 # 
-    load_model(lda_instance, 80, params)
+    load_model(lda_instance, 80)
 #
 #        
-    print_topics(lda_instance,topn=40,unique_sort=True)
+    print_topics(lda_instance,topn=50,unique_sort=True)
 #    
 #    jsd = []
 #    for topic in topics:

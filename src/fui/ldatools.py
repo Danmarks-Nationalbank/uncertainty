@@ -67,7 +67,7 @@ def print_topics(lda_instance, topn=30, unique_sort=True):
 #    clusters = hac.fcluster(Z, t=0.8, criterion='distance')
     lda_model = lda_instance.lda_model
     
-    csv_path = os.path.join(params().paths['root']+params().paths['lda'], 
+    csv_path = os.path.join(params().paths['lda'], 
                             'topic_words'+str(lda_model.num_topics)+'.csv') 
     header = ['topic_'+str(x) for x in range(lda_model.num_topics)]
     

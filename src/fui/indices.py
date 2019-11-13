@@ -220,9 +220,9 @@ def merge_lda_u(extend=True,sample_size=0):
             return df.sample(sample_size) 
         return df
     except FileNotFoundError:
+        print('File not found, merging lda topics and uncertainty counts...')
         df_u = load_u_count(extend=extend,sample_size=sample_size)
-        with open(params().paths['doc_topics']+'document_topics.pkl', 'rb') as f:
-            df = pickle.load(f)
+        df = load_doc_topics()
     
         df = df.merge(df_u, 'inner', 'article_id')
         df.drop(columns='ArticleDateCreated_y',inplace=True)
@@ -351,14 +351,16 @@ def plot_index(
         ax.axvspan(xmin=datetime(2018,3,1), xmax=datetime(2019,5,31), color=(102/255, 102/255, 102/255), alpha=0.3)
         ax.annotate("Trade war", xy=(datetime(2018,11,15), 0.97),  xycoords=('data', 'axes fraction'), fontsize='x-small', ha='center')
 
-        dates_dict = {'9/11':'2001-09-11', 
+        dates_dict = {'Euro \nreferendum': '2000-09-28',
+                      '9/11':'2001-09-11', 
                       '2001\n Election': '2001-11-20',
                       'Invasion of Iraq': '2003-03-19',
-                      '2003\nElection': '2005-02-08',     
+                      '2005\nElection': '2005-02-08',     
                       'Northern Rock\n bank run': '2007-09-14',
                       '2007\n Election': '2007-11-13',
                       'Lehman Brothers': '2008-09-15', 
                       '2010 Flash Crash': '2010-05-06',
+                      '2011 Election': '2011-09-15',
                       '"Whatever\n it takes"': '2012-07-26', 
                       '2013 US Gov\n shutdown': '2013-10-15', 
                       'DKK pressure\n crisis': '2015-02-15',
@@ -370,8 +372,8 @@ def plot_index(
                       'Danke Bank\n money laundering': '2018-09-15',
                       '2018 US Gov\n shutdown': '2018-12-10'}
         
-        heights = [0.7, 0.8, 0.9, 0.8, 0.9, 0.8, 
-                   0.97, 0.9, 0.7, 0.9, 0.7, 0.95, 0.8,
+        heights = [0.15,0.7, 0.8, 0.9, 0.8, 0.9, 0.8, 
+                   0.97, 0.9, 0.8, 0.7, 0.9, 0.7, 0.95, 0.8,
                    0.97, 0.9, 0.7, 0.9, 0.8]
 
         for l, d, h in zip(dates_dict.keys(), dates_dict.values(), heights):
@@ -428,16 +430,17 @@ def ECB_index(name, cat=['P','F'], num_topics=80, use_weights=False, extend_u=Tr
         df['u_share'] = df['u_count']/df['word_count']
         df['idx'] = df['idx']*df['u_share']
 
-def intersection_index(name, cat=['P','F'], num_topics=80, threshold=0.0, extend_u=True,
+def intersection_index(name, df, cat=['P','F'], num_topics=80, threshold=0.0, extend_u=True,
                        exclude_dk=False, start_year=2000, end_year=2019, u_weight=False):
-    df = merge_lda_u(extend_u)
+    if df is None: 
+        df = merge_lda_u(extend_u)
     
     if threshold < 0.0:
         print("No negative thresholds.")
         return 0
     
-    label_dict = parse_topic_labels(num_topics,'epu')
-    labels = pd.DataFrame.from_dict(label_dict,orient='index',columns=['cat','region'])
+    label_dict = parse_topic_labels(num_topics, 'epu')
+    labels = pd.DataFrame.from_dict(label_dict, orient='index', columns=['cat','region'])
     labels['topic'] = labels.index.astype('int64')
     labels.fillna(value='N/A', inplace=True)
     
@@ -453,7 +456,7 @@ def intersection_index(name, cat=['P','F'], num_topics=80, threshold=0.0, extend
         df[c] = df['topics'].apply(_topic_weights, args=(topic_idx,region_idx,0.0))
     #df['in_idx'] = (df[cat] > threshold).all(1).astype(int)
 
-    df['idx'] = df.loc[:, cat].prod(axis=1)*(df[cat] > 0.001).all(1).astype(int) 
+    df['idx'] = df.loc[:, cat].prod(axis=1)*(df[cat] > 0.05).all(1).astype(int) 
     
     if u_weight:
         df['u_share'] = df['u_count']/df['word_count']
@@ -462,13 +465,21 @@ def intersection_index(name, cat=['P','F'], num_topics=80, threshold=0.0, extend
     idx = _aggregate(df,name=name,start_year=start_year,end_year=end_year)
     return idx
 
-def topic_decomp_index(topic, name, extend_u=True):
-    df = merge_lda_u(extend_u)
-    if isinstance(topic, int):
-        topic = [topic]
-    df['tw'] = df['topics'].apply(lambda x : np.array([j for i,j in enumerate(x) if i in topic]).sum())
+def topic_decomp_index(df, topics, name, extend_u=True, num_topics=80,
+                       start_year=2000, end_year=2019):
+    if df is None: 
+        df = merge_lda_u(extend_u)
+    if isinstance(topics, int):
+        topics = [topics]
+    else:
+        label_dict = parse_topic_labels(num_topics, 'meta_topics')
+        topic_list = label_dict[topics]
+    
+    df['tw'] = df['topics'].apply(lambda x : np.array([j for i,j in enumerate(x) if i in topic_list]).sum())
     df['u_share'] = df['u_count']/df['word_count']
     df['idx'] = df['tw']*df['u_share']
+    idx = _aggregate(df,name=name,start_year=start_year,end_year=end_year)
+    return idx
 
 def bloom_index(bloom_dict, name, logic, start_year=2000, end_year=2019, 
                 weighted=False, extend=True):
@@ -561,7 +572,6 @@ def bloom_index(bloom_dict, name, logic, start_year=2000, end_year=2019,
     return idx
     
 
-    
 if __name__ == '__main__':
  
     #uncertainty_count(extend=True)
@@ -569,11 +579,12 @@ if __name__ == '__main__':
     
     #cl80 = ClusterTree(80,params)
     #cl80.dendrogram()
-
-    idx = intersection_index(name='xsection_uw',extend_u=True,threshold=0.2,exclude_dk=False,u_weight=True)
+    df = merge_lda_u()
+    #idx = topic_decomp_index(df=df,topics='International politics',name='decomp_uw_int_politics')
+    idx = intersection_index(df=df,name='xsection_uw_all',extend_u=True,threshold=0.2,exclude_dk=False,u_weight=True)
     #idx = bloom_index('bloom_extended', name='bl_uw_ext', extend=True, weighted=True, logic='EandP', start_year=2000,end_year=2019)
     val = validation(idx)
-    plot_index(params().paths['indices'], idx, 'bl_uw_ext', annotate=True)
+    plot_index(params().paths['indices'], idx, 'xsection_uw_all', annotate=True)
 #    NB_blue = '#007bd1'
 #    fig = plt.figure(figsize=(5, 5))
 #    ax = fig.add_subplot(111)

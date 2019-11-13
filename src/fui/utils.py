@@ -32,7 +32,7 @@ def dump_csv(folder_path, file_name, df, verbose=False):
     """
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
-    df.to_csv(os.path.join(folder_path, file_name+'csv'), sep=',')
+    df.to_csv(os.path.join(folder_path, file_name+'.csv'), sep=',')
     if verbose:
         print("Wrote file '{}' with shape {} to disc".format(file_name, df.shape))
 
@@ -100,20 +100,3 @@ class _Singleton:
         for _, folder_path in self.paths.items():
             if not os.path.exists(folder_path):
                 os.makedirs(folder_path)
-
-def define_NB_colors():
-    """
-    Defines Nationalbankens' colors and update matplotlib to use those as default
-    """
-    c = cycler(
-        'color',
-        [
-            (0/255, 123/255, 209/255),
-            (146/255, 34/255, 156/255),
-            (196/255, 61/255, 33/255),
-            (223/255, 147/255, 55/255),
-            (176/255, 210/255, 71/255),
-            (102/255, 102/255, 102/255)
-        ])
-    plt.rcParams["axes.prop_cycle"] = c
-    return c
