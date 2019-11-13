@@ -2,7 +2,7 @@ import os
 import sys
 #hacky spyder crap
 #sys.path.insert(1, 'C:\\Users\\EGR\\AppData\\Roaming\\Python\\Python37\\site-packages')
-sys.path.insert(1, 'D:\\projects\\FUI')
+sys.path.insert(1, 'D:\\projects\\FUI\\src')
 sys.path.insert(1, 'D:\\projects\\FUI\\env\\Lib\\site-packages')
 sys.path.insert(1, 'C:\\Users\\EGR\\AppData\\Roaming\\Python\\Python37\\site-packages')
 import pickle
@@ -14,7 +14,6 @@ import gensim
 import copy
 import pandas as pd
 import matplotlib.dates as mdates
-#import matplotlib.patches as patches
 
 from gensim.models import KeyedVectors
 from cycler import cycler
@@ -23,8 +22,10 @@ from nltk.stem.snowball import SnowballStemmer
 from multiprocessing import Pool
 from functools import partial
 from matplotlib import pyplot as plt
-from fui.cluster import ClusterTree
-from fui.utils import main_directory, dump_pickle, dump_csv, params
+
+#local imports
+#from fui.cluster import ClusterTree
+from fui.utils import dump_pickle, dump_csv, params
 
 def validation(idx,start_year=2000,end_year=2019):
     if end_year == 2019:
@@ -94,16 +95,16 @@ def _stemtext(text, min_len=2, max_len=25):
     stemmed_list = [stemmer.stem(word) for word in list_to_stem if len(word) >= min_len and len(word) <= max_len]
     return stemmed_list
 
-def parse_topic_labels(num_topics):
+def parse_topic_labels(num_topics,name):
     """
     reads hand labeled topics from json file.
     
     """
     label_path = os.path.join(params().paths['topic_labels'], 
-                        'epu'+str(num_topics)+'.json')
+                        name+str(num_topics)+'.json')
     with open(label_path, 'r') as f:
         labels = json.load(f)
-    return labels  
+    return labels
 
 def load_vix(f='M',start_year=2000,end_year=2019,end_str=''):
     v1x = pd.read_csv(params().paths['input']+'v1x_monthly.csv', 
@@ -207,7 +208,7 @@ def load_u_count(sample_size=0,year='all',extend=True):
         else:
             return df
     
-def merge_lda_u(extend=True):
+def merge_lda_u(extend=True,sample_size=0):
     if extend:
         suffix='u_count_extend'
     else:
@@ -215,9 +216,11 @@ def merge_lda_u(extend=True):
     try:
         with open(params().paths['doc_topics']+'doc_topics_'+suffix+'.pkl', 'rb') as f:
             df = pickle.load(f)
+        if sample_size > 0:
+            return df.sample(sample_size) 
         return df
     except FileNotFoundError:
-        df_u = load_u_count(extend=extend)
+        df_u = load_u_count(extend=extend,sample_size=sample_size)
         with open(params().paths['doc_topics']+'document_topics.pkl', 'rb') as f:
             df = pickle.load(f)
     
@@ -233,7 +236,7 @@ def load_doc_topics():
     return df
     
 def _aggregate(df, name, col='idx', aggregation=['M'], norm=True,
-               start_year=2000, end_year=2019, write_csv=True):
+               start_year=2000, end_year=2019, write_csv=True, method='mean'):
     """
     aggregates to means within 
     each aggregation frequency
@@ -247,7 +250,7 @@ def _aggregate(df, name, col='idx', aggregation=['M'], norm=True,
     for f in aggregation:
         idx = df[[col, 'ArticleDateCreated']].groupby(
             [pd.Grouper(key='ArticleDateCreated', freq=f)]
-        ).agg(['mean']).reset_index()
+        ).agg([method]).reset_index()
         
         idx.set_index('ArticleDateCreated', inplace=True)
         idx.index = idx.index.rename('date')
@@ -267,6 +270,49 @@ def _aggregate(df, name, col='idx', aggregation=['M'], norm=True,
     else:
         return agg_dict
     
+def _bloom_compare(word_list, logic, bloom_E, bloom_P, bloom_U):  
+    stem_set = set(word_list)        
+    return eval(logic)
+
+def _get_bloom_sets(bloom_dict):
+    b_E = set(bloom_dict['economic'])
+    b_P = set(bloom_dict['political'])
+    b_U = set(bloom_dict['uncertainty'])
+    return b_E, b_P, b_U
+     
+def _topic_weights(topic_weights,topic_idx,region_idx,threshold):
+    if threshold > 0.0:
+        psum = np.array(
+                [topic_weights[int(i)] for i in topic_idx if topic_weights[int(i)] >= threshold and i in region_idx]).sum()
+    else:
+        psum = np.array([topic_weights[int(i)] for i in topic_idx if i in region_idx]).sum()
+    return psum
+
+def define_NB_colors():
+    """
+    Defines Nationalbankens' colors and update matplotlib to use those as default
+    """
+    c = cycler(
+        'color',
+        [
+            (0/255, 123/255, 209/255),
+            (146/255, 34/255, 156/255),
+            (196/255, 61/255, 33/255),
+            (223/255, 147/255, 55/255),
+            (176/255, 210/255, 71/255),
+            (102/255, 102/255, 102/255)
+        ])
+    plt.rcParams["axes.prop_cycle"] = c
+    return c
+
+def normalize(series):
+    return (series-series.mean())/series.std()
+
+def _calc_corr(df1,df2):
+    df1 = df1.join(df2, how='inner', on='date')
+    corr_mat = pd.np.corrcoef(df1.iloc[:,0].tolist(), df1.iloc[:,1].tolist())
+    return corr_mat[0,1]
+
 def plot_index(
     out_path, idx, name, plot_vix=True, 
     start_year=2000, end_year=2019, annotate=True):
@@ -341,7 +387,7 @@ def plot_index(
     return fig, ax
 
 def ECB_index(name, cat=['P','F'], num_topics=80, use_weights=False, extend_u=True,
-              threshold=0.0, req_all=False, start_year=2000, end_year=2019):
+              threshold=0.0, req_all=False, start_year=2000, end_year=2019, u_weight=False):
     
     df = merge_lda_u(extend_u)
     
@@ -362,7 +408,7 @@ def ECB_index(name, cat=['P','F'], num_topics=80, use_weights=False, extend_u=Tr
             df['idx'] = df['max_topic_cat'].apply(lambda x : bool(set(x).intersection(set(cat)))*1)
         else:
             df['idx'] = df['max_topic_cat'].apply(lambda x : bool(set(x)==set(cat))*1)
-        idx = _aggregate(df,'ECB',name=name,start_year=start_year,end_year=end_year)
+        idx = _aggregate(df,name=name,start_year=start_year,end_year=end_year)
         return idx
 
     else:
@@ -377,6 +423,10 @@ def ECB_index(name, cat=['P','F'], num_topics=80, use_weights=False, extend_u=Tr
         df['idx'] = df['topics'].apply(_topic_weights, args=(topic_idx,threshold))
         idx = _aggregate(df,name=name,start_year=start_year,end_year=end_year)
         return idx
+    
+    if u_weight:
+        df['u_share'] = df['u_count']/df['word_count']
+        df['idx'] = df['idx']*df['u_share']
 
 def intersection_index(name, cat=['P','F'], num_topics=80, threshold=0.0, extend_u=True,
                        exclude_dk=False, start_year=2000, end_year=2019, u_weight=False):
@@ -386,7 +436,7 @@ def intersection_index(name, cat=['P','F'], num_topics=80, threshold=0.0, extend
         print("No negative thresholds.")
         return 0
     
-    label_dict = parse_topic_labels(num_topics)
+    label_dict = parse_topic_labels(num_topics,'epu')
     labels = pd.DataFrame.from_dict(label_dict,orient='index',columns=['cat','region'])
     labels['topic'] = labels.index.astype('int64')
     labels.fillna(value='N/A', inplace=True)
@@ -406,10 +456,19 @@ def intersection_index(name, cat=['P','F'], num_topics=80, threshold=0.0, extend
     df['idx'] = df.loc[:, cat].prod(axis=1)*(df[cat] > 0.001).all(1).astype(int) 
     
     if u_weight:
-        df['idx'] = df['in_idx']*np.log(df['u_count']+1)
+        df['u_share'] = df['u_count']/df['word_count']
+        df['idx'] = df['idx']*df['u_share']
     
     idx = _aggregate(df,name=name,start_year=start_year,end_year=end_year)
     return idx
+
+def topic_decomp_index(topic, name, extend_u=True):
+    df = merge_lda_u(extend_u)
+    if isinstance(topic, int):
+        topic = [topic]
+    df['tw'] = df['topics'].apply(lambda x : np.array([j for i,j in enumerate(x) if i in topic]).sum())
+    df['u_share'] = df['u_count']/df['word_count']
+    df['idx'] = df['tw']*df['u_share']
 
 def bloom_index(bloom_dict, name, logic, start_year=2000, end_year=2019, 
                 weighted=False, extend=True):
@@ -483,6 +542,8 @@ def bloom_index(bloom_dict, name, logic, start_year=2000, end_year=2019,
                                                   bloom_P=b_P, 
                                                   bloom_U=b_U), 
                                                   df['body_stemmed'].values.tolist())
+                
+                df['u_share'] = df['u_count']/df['word_count']
                 df['idx'] = df['idx']*df['u_count']
                 dump_pickle(out_path,'bloom'+str(f[1])+'_weighted.pkl',df[['article_id','idx','u_count','ArticleDateCreated']])
                 df_out = df_out.append(df[['article_id','idx','u_count','ArticleDateCreated']])    
@@ -499,64 +560,17 @@ def bloom_index(bloom_dict, name, logic, start_year=2000, end_year=2019,
                      start_year=start_year, end_year=end_year)
     return idx
     
-def _bloom_compare(word_list, logic, bloom_E, bloom_P, bloom_U):  
-    stem_set = set(word_list)        
-    return eval(logic)
 
-def _get_bloom_sets(bloom_dict):
-    b_E = set(bloom_dict['economic'])
-    b_P = set(bloom_dict['political'])
-    b_U = set(bloom_dict['uncertainty'])
-    return b_E, b_P, b_U
-     
-def _topic_weights(topic_weights,topic_idx,region_idx,threshold):
-    if threshold > 0.0:
-        psum = np.array(
-                [topic_weights[int(i)] for i in topic_idx if topic_weights[int(i)] >= threshold and i in region_idx]).sum()
-    else:
-        psum = np.array([topic_weights[int(i)] for i in topic_idx if i in region_idx]).sum()
-    return psum
-
-def define_NB_colors():
-    """
-    Defines Nationalbankens' colors and update matplotlib to use those as default
-    """
-    c = cycler(
-        'color',
-        [
-            (0/255, 123/255, 209/255),
-            (146/255, 34/255, 156/255),
-            (196/255, 61/255, 33/255),
-            (223/255, 147/255, 55/255),
-            (176/255, 210/255, 71/255),
-            (102/255, 102/255, 102/255)
-        ])
-    plt.rcParams["axes.prop_cycle"] = c
-    return c
-
-def normalize(series):
-    return (series-series.mean())/series.std()
-
-def _calc_corr(df1,df2):
-    df1 = df1.join(df2, how='inner', on='date')
-    corr_mat = pd.np.corrcoef(df1.iloc[:,0].tolist(), df1.iloc[:,1].tolist())
-    return corr_mat[0,1]
     
 if __name__ == '__main__':
  
-    uncertainty_count(extend=True)
-    uncertainty_count(extend=False)
+    #uncertainty_count(extend=True)
+    #uncertainty_count(extend=False)
     
-    #idx = ECB_index(params,df,use_weights=True)
-    #idx2 = ECB_index(params,df,use_weights=True,threshold=2e-04)
-    #test = labels.index[labels['cat'] == 'P'].tolist()
-    #idx = ECB_index(params,df,use_weights=True,threshold=2e-04)
-    #df2 = df.sample(10000)
-    #df = load_doc_topics(params)
     #cl80 = ClusterTree(80,params)
     #cl80.dendrogram()
 
-    idx = intersection_index(name='xsection_uw',extend=True,threshold=0.2,exclude_dk=False,u_weight=True)
+    idx = intersection_index(name='xsection_uw',extend_u=True,threshold=0.2,exclude_dk=False,u_weight=True)
     #idx = bloom_index('bloom_extended', name='bl_uw_ext', extend=True, weighted=True, logic='EandP', start_year=2000,end_year=2019)
     val = validation(idx)
     plot_index(params().paths['indices'], idx, 'bl_uw_ext', annotate=True)
