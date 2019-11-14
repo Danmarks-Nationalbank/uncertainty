@@ -29,3 +29,4 @@ pylint          == 2.4.0
 gensim		== 3.8.1
 h5py == 2.8.0
 lemmy
+feather
