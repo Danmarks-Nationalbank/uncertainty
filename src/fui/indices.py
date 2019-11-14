@@ -12,6 +12,7 @@ import glob
 import re
 import gensim
 import copy
+import codecs
 import pandas as pd
 import matplotlib.dates as mdates
 
@@ -24,8 +25,12 @@ from functools import partial
 from matplotlib import pyplot as plt
 
 #local imports
-#from fui.cluster import ClusterTree
+from fui.cluster import ClusterTree
 from fui.utils import dump_pickle, dump_csv, params
+
+class BaseIndexer():
+    def __init__
+    
 
 def validation(idx,start_year=2000,end_year=2019):
     if end_year == 2019:
@@ -102,8 +107,9 @@ def parse_topic_labels(num_topics,name):
     """
     label_path = os.path.join(params().paths['topic_labels'], 
                         name+str(num_topics)+'.json')
-    with open(label_path, 'r') as f:
-        labels = json.load(f)
+      
+    with codecs.open(label_path, 'r', encoding='utf-8-sig') as f:
+                labels = json.load(f)
     return labels
 
 def load_vix(f='M',start_year=2000,end_year=2019,end_str=''):
@@ -577,14 +583,14 @@ if __name__ == '__main__':
     #uncertainty_count(extend=True)
     #uncertainty_count(extend=False)
     
-    #cl80 = ClusterTree(80,params)
-    #cl80.dendrogram()
-    df = merge_lda_u()
+    #cl80 = ClusterTree(80)
+    cl80.dendrogram()
+    #df = merge_lda_u()
     #idx = topic_decomp_index(df=df,topics='International politics',name='decomp_uw_int_politics')
-    idx = intersection_index(df=df,name='xsection_uw_all',extend_u=True,threshold=0.2,exclude_dk=False,u_weight=True)
+    #idx = intersection_index(df=df,name='xsection_uw_all',extend_u=True,threshold=0.2,exclude_dk=False,u_weight=True)
     #idx = bloom_index('bloom_extended', name='bl_uw_ext', extend=True, weighted=True, logic='EandP', start_year=2000,end_year=2019)
-    val = validation(idx)
-    plot_index(params().paths['indices'], idx, 'xsection_uw_all', annotate=True)
+    #val = validation(idx)
+    #plot_index(params().paths['indices'], idx, 'xsection_uw_all', annotate=True)
 #    NB_blue = '#007bd1'
 #    fig = plt.figure(figsize=(5, 5))
 #    ax = fig.add_subplot(111)

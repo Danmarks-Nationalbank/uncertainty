@@ -18,7 +18,7 @@ class ClusterTree():
     :metric: and :method: Used for HAC.
     """
     
-    def __init__(self, num_topics, metric='jensenshannon', method='ward'):
+    def __init__(self, num_topics, metric='jensenshannon', method='single'):
         """
         Saves linkage matrix :Z: and :nodelist:
         """
@@ -112,7 +112,7 @@ class ClusterTree():
         :colors: Approx. no of color clusters in figure.
         """
         from fui.indices import parse_topic_labels
-        self.labels = parse_topic_labels(self.num_topics)
+        self.labels = parse_topic_labels(self.num_topics,'labels')
         self.colors = colors
         fig = plt.figure(figsize=(w,h)) 
         plt.title("Topic Dendrogram")
