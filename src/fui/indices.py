@@ -10,6 +10,7 @@ import json
 import glob
 import re
 import copy
+import h5py
 import codecs
 import numpy as np
 import pandas as pd
@@ -25,7 +26,7 @@ from matplotlib import pyplot as plt
 
 #local imports
 from fui.cluster import ClusterTree
-from fui.utils import dump_pickle, dump_csv, params
+from fui.utils import dump_pickle, dump_csv, params, read_hdf, read_h5py
 
 years = mdates.YearLocator()   # every year
 months = mdates.MonthLocator((1, 4, 7, 10))
@@ -93,48 +94,6 @@ class BaseIndexer():
             self.labels = json.load(f)
         return self.labels
           
-    def uncertainty_count(self, dict_name='uncertainty', extend=True):
-        """
-        Finds for articles containing words in bloom dictionary. Saves result to disk.
-        args:
-        dict_name: name of bloom dict in params
-        logic: matching criteria in params
-        """
-        out_path = params().paths['parsed_news']
-     
-        if extend:
-            U_set = set(list(extend_dict_w2v(dict_name, n_words=10).values())[0])
-            filename = 'u_count_extend'
-        else:
-            U_set = set(list(params().dicts[dict_name].values())[0])
-            filename = 'u_count'
-    
-        #get parsed articles
-        filelist = glob.glob(params().paths['parsed_news']+'boersen*.pkl') 
-        yearlist = [f[-8:-4] for f in filelist]
-    
-        for (i,f) in enumerate(filelist):
-            print(f"Processing year {yearlist[i]}.")
-            with open(f, 'rb') as data:
-                try:
-                    df = pickle.load(data)
-                except TypeError:
-                    print("Parsed news is not a valid pickle!")
-            
-            #stem articles
-            with Pool(4) as pool:
-                df['body_stemmed'] = pool.map(_stemtext,
-                                              df['ArticleContents'].values.tolist())
-            
-            #compare to dictionary
-            with Pool(4) as pool:
-                df['u_count'] = pool.map(partial(_count, 
-                                         word_set=U_set), 
-                                         df['body_stemmed'].values.tolist())
-            
-            #save to disk
-            dump_pickle(out_path,filename+yearlist[i]+'.pkl',
-                        df[['article_id','u_count','ArticleDateCreated','word_count']])
 
     def aggregate(self, df, col='idx', norm=True, write_csv=True, method='mean'):
         """
@@ -245,7 +204,7 @@ class BaseIndexer():
         return fig, ax
     
 class LDAIndexer(BaseIndexer):    
-    def build(self, labels=None, num_topics=80, start_year=2000, end_year=2019, f='M', 
+    def build(self, labels='meta_topics', num_topics=80, start_year=2000, end_year=2019, f='M', 
               df=None, sample_size=0, topics=None, xsection=None, topic_thold=0.0, 
               xsection_thold=0.05, main_topic=True, extend_u_dict=True, u_weight=False):
         
@@ -263,9 +222,20 @@ class LDAIndexer(BaseIndexer):
         assert topics or xsection, "Must provide a list or dict of topics."
         assert topic_thold >= 0.0 and xsection_thold >= 0.0, "No negative thresholds."
         
+        if extend_u_dict:
+            filename = params().filenames['parsed_news_uc_ext']
+        else: 
         if df is None: 
-            df = merge_lda_u(extend_u_dict,sample_size,self.num_topics)
-            
+            df = read_h5py(os.path.join(params().paths['enriched_news'],
+                                       params().filenames['parsed_news_uc_ext']))
+        
+        if main_topic:
+            df['idx'] = df['topics'].apply(
+                lambda x : bool(np.argmax(x) in set(topics))*1)
+            if u_weight:
+                df['idx'] = df['idx']*(df['u_count']/df['word_count'])
+            self.idx = self.aggregate(df)
+            return self.idx
         
         if topics:
             if isinstance(topics, int):
@@ -273,11 +243,14 @@ class LDAIndexer(BaseIndexer):
             assert isinstance(topics, list) , "Keyword topics must be list or int."
             if isinstance(topics[0], str):
                 topics = self.label_dict[topics[0]]
-            
             self.topics = topics
-            df['topics'] = df['topics'].apply(
-                    lambda x : [j for i,j in enumerate(x) if i in topics])
-             
+            df['idx'] = df['topics'].apply(
+                    lambda x : np.array([j for i,j in enumerate(x) if (i in topics) and (j >= topic_thold)]).sum())
+            if u_weight:
+                df['idx'] = df['idx']*(df['u_count']/df['word_count'])
+            self.idx = self.aggregate(df)
+            return self.idx
+        
         if xsection:
             assert isinstance(xsection, dict) or isinstance(xsection, list), \
             "intersection_dict must be dict or list of dict keys"
@@ -294,36 +267,15 @@ class LDAIndexer(BaseIndexer):
                 cat.append(str(k))
             df['idx'] = df.loc[:, cat].prod(axis=1)*\
                         (df[cat] > xsection_thold).all(1).astype(int) 
-        
             if u_weight:
                 df['idx'] = df['idx']*(df['u_count']/df['word_count'])
-        
+
             self.idx = self.aggregate(df)
             return self.idx
-        
-        if main_topic:
-            df['idx'] = df['topics'].apply(
-                lambda x : bool(np.argmax(x) in set(topics))*1)
-        else:
-            df['idx'] = df['topics'].apply(
-                        lambda x : np.array([x[i] for i in topics if x[i] >= topic_thold]).sum())
-        
-        if u_weight:
-            df['idx'] = df['idx']*(df['u_count']/df['word_count'])
-        
-        self.idx = self.aggregate(df)
-        return self.idx
 
 class BloomIndexer(BaseIndexer):
     def build(self, logic, bloom_dict_name,
               start_year=2000, end_year=2019, f='M', u_weight=False, extend=True):
-        self.start_year = start_year
-        self.end_year = end_year
-        if self.end_year == 2019:
-            self.end_str = '-05-31'
-        else:
-            self.end_str = ''
-        
         """
         Finds for articles containing words in bloom dictionary. Saves result to disk.
         args:
@@ -331,85 +283,55 @@ class BloomIndexer(BaseIndexer):
         dict_name: name of bloom dict in params
         logic: matching criteria in params
         """
-        out_path = params().paths['indices']+self.name+'\\'+logic
+        self.start_year = start_year
+        self.end_year = end_year
+        self.logic = logic
+        if self.end_year == 2019:
+            self.end_str = '-05-31'
+        else:
+            self.end_str = ''
+        
+        out_path = params().paths['indices']+self.name+'\\'+self.logic
         if not os.path.exists(out_path):
             os.makedirs(out_path)        
-        
-        # check if pickles exist
-        pickles = glob.glob(out_path+'\\*.pkl') 
-        if len(pickles) is not end_year-start_year+1:
-            print("Pickles not found, creating index files...")
-            if extend:
-                bloom_dict = extend_dict_w2v(bloom_dict_name, n_words=10)
-            else:
-                bloom_dict = params().dicts[bloom_dict_name]
-            
-            b_E, b_P, b_U = _get_bloom_sets(bloom_dict)
-            print('\n\nEconomic words: ' + repr(b_E) +
-                  '\n\n Political words: ' + repr(b_P) +
-                  '\n\n Uncertainty words: ' + repr(b_U))
-            
-            #get parsed articles
-            filelist = glob.glob(params().paths['parsed_news']+'boersen*.pkl') 
-            filelist = [(fl,int(fl[-8:-4])) for fl in filelist 
-                        if int(fl[-8:-4]) >= start_year and int(fl[-8:-4]) <= end_year]
-            
-            df_out = pd.DataFrame()
-        
-            for f in filelist:
-                print('\nNow processing year '+str(f[1]))
-                with open(f[0], 'rb') as data:
-                    try:
-                        df = pickle.load(data)
-                    except TypeError:
-                        print("Parsed news is not a valid pickle!")
-                    
-                #stem articles
-                with Pool() as pool:
-                    df['body_stemmed'] = pool.map(_stemtext, 
-                                                  df['ArticleContents'].values.tolist())
-                if not u_weight:
-                    logic_str = params().options['bloom_logic'][logic]
-                    print('\nLogic: '+logic_str)
-                    #compare to dictionary
-                    with Pool() as pool:
-                        df['idx'] = pool.map(partial(_bloom_compare, 
-                                                     logic=logic_str, 
-                                                     bloom_E=b_E, 
-                                                     bloom_P=b_P, 
-                                                     bloom_U=b_U), 
-                                                     df['body_stemmed'].values.tolist())
-                    
-                    #save to disk
-                    dump_pickle(out_path,'bloom'+str(f[1])+'.pkl', df[['article_id', 'idx', 'ArticleDateCreated']])
-                    df_out = df_out.append(df[['article_id', 'idx', 'ArticleDateCreated']])    
-                else:
-                    logic_str = params().options['bloom_logic_weighted']
-                    df_u = _load_u_count(year=f[1])
-                    df = df.merge(df_u[['u_count','article_id']], how='left', on='article_id')
-                    with Pool() as pool:
-                        df['idx'] = pool.map(partial(_bloom_compare, 
-                                                     logic=logic_str, 
-                                                     bloom_E=b_E, 
-                                                     bloom_P=b_P, 
-                                                     bloom_U=b_U), 
-                                                     df['body_stemmed'].values.tolist())
-                    
-                    df['idx'] = df['idx']*(df['u_count']/df['word_count'])
-                    dump_pickle(out_path, 'bloom'+str(f[1])+'_weighted.pkl', df[['article_id','idx','u_count','ArticleDateCreated']])
-                    df_out = df_out.append(df[['article_id', 'idx', 'u_count', 'ArticleDateCreated']])    
-            
+
+        if extend:
+            bloom_dict = extend_dict_w2v(bloom_dict_name, n_words=10)
+            df = read_h5py(os.path.join(params().paths['enriched_news'],
+                                       params().filenames['parsed_news_uc_ext']))
         else:
-            print("Loading pickled index files...")
-            df_out = pd.DataFrame()
-            for fl in pickles:
-                with open(fl, 'rb') as data:
-                    df = pickle.load(data)
-                    df_out = df_out.append(df)
-                    
-        self.idx = self.aggregate(df_out)
+            bloom_dict = params().dicts[bloom_dict_name]
+            df = read_h5py(os.path.join(params().paths['enriched_news'],
+                                       params().filenames['parsed_news_uc']))
+
+        b_E, b_P, b_U = _get_bloom_sets(bloom_dict)
+        print('\n\nEconomic words: ' + repr(b_E) +
+              '\n\n Political words: ' + repr(b_P) +
+              '\n\n Uncertainty words: ' + repr(b_U))
+        
+        #stem articles
+        with Pool() as pool:
+            df['body_stemmed'] = pool.map(_stemtext, 
+                                          df['ArticleContents'].values.tolist())
+        if u_weight:
+            logic_str = params().options['bloom_logic_weighted']
+        else:
+            logic_str = params().options['bloom_logic'][self.logic]
+            
+        print('\nLogic: '+logic_str)
+        #compare to dictionary
+        with Pool() as pool:
+            df['idx'] = pool.map(partial(_bloom_compare, 
+                                         logic=logic_str, 
+                                         bloom_E=b_E, 
+                                         bloom_P=b_P, 
+                                         bloom_U=b_U), 
+                                         df['body_stemmed'].values.tolist())
+        if u_weight:
+            df['idx'] = df['idx']*(df['u_count']/df['word_count'])
+
+        self.idx = self.aggregate(df)
         return self.idx
-    
 
 def _calc_corr(df1,df2):
     df1 = df1.join(df2, how='inner', on='date')
@@ -546,15 +468,50 @@ def extend_dict_w2v(dict_name, n_words=10):
                 continue
     return dict_out
 
+def uncertainty_count(dict_name='uncertainty', extend=True):
+    """
+    Finds for articles containing words in bloom dictionary. Saves result to disk.
+    args:
+    dict_name: name of bloom dict in params
+    logic: matching criteria in params
+    """ 
+    if extend:
+        U_set = set(list(extend_dict_w2v(dict_name, n_words=10).values())[0])
+        filename = params().filenames['parsed_news_uc_ext']
+    else:
+        U_set = set(list(params().dicts[dict_name].values())[0])
+        filename = params().filenames['parsed_news_uc']
+
+    #get parsed articles
+    df = read_h5py(os.path.join(params().paths['parsed_news'],
+                               params().filenames['parsed_news']))
+
+    #stem articles
+    with Pool(4) as pool:
+        df['body_stemmed'] = pool.map(_stemtext,
+                                      df['ArticleContents'].values.tolist())
+    
+    #compare to dictionary
+    with Pool(4) as pool:
+        df['u_count'] = pool.map(partial(_count, 
+                                 word_set=U_set), 
+                                 df['body_stemmed'].values.tolist())
+        
+    #save to disk
+    outpath = os.path.join(params().paths['enriched_news'],filename)
+    with h5py.File(outpath, 'w') as hf:
+        string_dt = h5py.string_dtype(encoding='utf-8')
+        hf.create_dataset('parsed_strings_u', data=df, dtype=string_dt)
 
 if __name__ == '__main__':
-        
     
-    ecb = LDAIndexer(name='ecb')
-    ecb.build(num_topics=80,labels='meta_topics',sample_size=20000,topics=['EP'],main_topic=True)
+    uncertainty_count()
+    uncertainty_count(extend=False)
+    #international = LDAIndexer(name='International')
+    #international.build(num_topics=80,sample_size=0,topics=['International'],topic_thold=0.05,main_topic=False)
     
-    xidx = LDAIndexer(name='xidx')
-    xidx.build(num_topics=80,labels='meta_topics',sample_size=20000,xsection=['EP','F'],u_weight=True)
+    #xidx = LDAIndexer(name='xidx')
+    #xidx.build(num_topics=80,labels='meta_topics',sample_size=20000,xsection=['EP','F'],u_weight=True)
 
-    bloom = BloomIndexer(name='bloom')
-    bloom.build(logic='EandPandU',bloom_dict_name='bloom_extended',extend=True)
+    #bloom = BloomIndexer(name='bloom')
+    #bloom.build(logic='EandPandU',bloom_dict_name='bloom_extended',extend=True)

@@ -17,9 +17,9 @@ from matplotlib import colors
 from multiprocessing import Pool
 #from wordcloud import WordCloud
 import lemmy
-from langdetect import detect
+#from langdetect import detect
 
-from fui.utils import timestamp, params
+from fui.utils import timestamp, params, read_h5py
 
 
 def __remove_stopwords(word_list, stopfile):
@@ -420,16 +420,12 @@ def get_unique_words(lda_model, lda_instance, topn=10):
 
     return df_out
 
-def merge_documents_and_topics(filelist, lda_instance):
+def merge_documents_and_topics(lda_instance):
     # Load parsed articles
     print("Merging documents and LDA-topics")
-    articles = pd.DataFrame()
-    for f in filelist:    
-        with open(f, 'rb') as f_in:
-            df_n = pickle.load(f_in)
-            articles = articles.append(df_n)
-    
-    articles.rename({'ID2': 'article_id'}, axis=1, inplace=True)
+    articles = read_h5py(os.path.join(params().paths['parsed_news'],
+                                      params().filenames['parsed_news']))
+
     print("\tLoaded {} enriched documents ({} unique)... {}".format(len(articles),
                                                                     len(articles['article_id'].unique()),
                                                                     timestamp()))
@@ -461,19 +457,18 @@ def merge_documents_and_topics(filelist, lda_instance):
     print("\tJoin between LDA-topics and enriched documents gave {} documents... {}".format(len(df_enriched_lda),
                                                                                             timestamp()))
 
-    # Datetime conversion and weekdate
-#    df_enriched_lda['dates'] = pd.to_datetime(df_enriched_lda['dates'])
-#    df_enriched_lda['weekdate'] = (
-#                df_enriched_lda['dates'] - df_enriched_lda['dates'].dt.weekday * timedelta(days=1)).dt.date
+
 
     # Save enriched documents with their topics
     folder_path = params().paths['doc_topics']
     topics_path = os.path.join(folder_path, params().filenames['lda_merge_doc_topics_file'])
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
-    with open(topics_path, 'wb') as f_out:
-        print("\tWriting file to disc... {}".format(timestamp()))
-        pickle.dump(df_enriched_lda, f_out)
+        
+    df2 = pd.DataFrame(df_enriched_lda.topics.values.tolist(), index = df_enriched_lda.index)
+    df_enriched_lda = pd.concat([df2, df_enriched_lda[['article_id', 'Title', 'ArticleDateCreated']]], axis=1)
+    del(df2)
+    df_enriched_lda.to_hdf(os.path.join(folder_path,topics_path), 'table', format='table', mode='w', append=False)
 
 
 def generate_wordclouds(lda_instance, num_words=15):

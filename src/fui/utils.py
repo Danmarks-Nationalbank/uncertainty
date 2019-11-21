@@ -7,6 +7,8 @@ import shutil
 import datetime
 import pickle
 import codecs
+import h5py
+import pandas as pd
 
 def main_directory():
     """
@@ -25,6 +27,42 @@ def dump_pickle(folder_path, file_name, df, verbose=False):
         if verbose:
             print("Wrote file '{}' with shape {} to disc".format(file_name, df.shape))
 
+def dump_hdf(folder_path, file_name, df, verbose=False):
+    file_path = os.path.join(folder_path, file_name)
+    df.to_hdf(file_path, 'table', format='table', mode='w', append=False)
+    if verbose:
+        print("Wrote file '{}' with shape {} to disc".format(file_name, df.shape))
+
+
+def read_hdf(file_path, verbose=False, obj='table'):
+    try:
+        df = pd.read_hdf(file_path, obj)
+        if verbose:
+            print("Loaded pickle with {} rows".format(len(df)))
+        return df
+    except FileNotFoundError:
+        print("File not found!")
+        return None
+
+def read_h5py(file_path, obj='parsed_strings'):
+    try:
+        hf = h5py.File(file_path, 'r')
+        df = pd.DataFrame(hf['parsed_strings'][:])
+        df.rename(columns={0: 'Title', 
+                           1: 'ArticleContents', 
+                           2: 'ArticleDateCreated', 
+                           3: 'Supplier', 
+                           4: 'article_id', 
+                           5: 'word_count'}, inplace=True)
+        df['article_id'] = df['article_id'].astype('int')
+        df['word_count'] = df['word_count'].astype('int')
+        if df.shape[0] == 7:
+            df.rename(columns={6:'u_count'}, inplace=True)
+            df['u_count'] = df['u_count'].astype('int')
+        return df
+    except FileNotFoundError:
+        print("File not found!")
+        return None
 
 def dump_csv(folder_path, file_name, df, verbose=False):
     """

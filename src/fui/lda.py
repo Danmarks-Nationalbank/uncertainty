@@ -13,7 +13,7 @@ import json
 import lemmy
 
 from src.fui.ldatools import preprocess
-from src.fui.utils import timestamp, params
+from src.fui.utils import timestamp, params, read_h5py
 
 from collections import Counter
 from datetime import timedelta, datetime
@@ -26,13 +26,12 @@ from nltk.stem.snowball import SnowballStemmer
 
 
 class LDA:
-    def __init__(self, files_list, lemmatizer, test_share=0.05, test=False):
+    def __init__(self, lemmatizer, test_share=0.05, test=False):
         self.dictionary = None
         self.articles = []
         self.article_id = []
         self.SerializedCorpus = None
         self.test = test        
-        self.files_list = files_list
         self.lemmatizer = lemmatizer
         self.test_share = test_share
                 
@@ -53,16 +52,16 @@ class LDA:
             yield self.bigram_phraser[line.split()]
 
     def load_and_clean_body_text(self):
-        print("No existing pre-processed data found. Loading {} file(s) for preprocessing".format(len(self.files_list)))
-        for f in self.files_list:
-            with open(f, 'rb') as f_in:
-                df = pickle.load(f_in)
+        print("No existing pre-processed data found. Loading h5-file for preprocessing")
 
-                try:
-                    self.articles.extend(list(df['ArticleContents'].values))
-                    self.article_id.extend(list(df['ID2'].values))
-                except KeyError:
-                    print("Skipped {}, file doesn't contain any body-text".format(f))
+        df = read_h5py(os.path.join(params().paths['parsed_news'],
+                                    params().filenames['parsed_news']))
+
+        try:
+            self.articles.extend(list(df['ArticleContents'].values))
+            self.article_id.extend(list(df['article_id'].values))
+        except KeyError:
+            print("File doesn't contain any body-text")
 
         # Perform LDA on smaller sample, just for efficiency in case of testing...
         if self.test is True:

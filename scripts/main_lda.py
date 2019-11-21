@@ -18,7 +18,7 @@ import glob
 from matplotlib import pyplot as plt
 
 from fui.lda import LDA
-from fui.utils import main_directory, dump_pickle, dump_csv, define_NB_colors, params
+from fui.utils import main_directory, dump_pickle, dump_csv, params
 from fui.ldatools import preprocess, optimize_topics, create_dictionary, create_corpus, save_models, load_model, load_models
 from fui.ldatools import generate_wordclouds, merge_documents_and_topics
 from fui.ldatools import get_unique_words, jsd_measure
@@ -30,15 +30,13 @@ if __name__ == "__main__":
     NROWS = None
     topics = [65,68,70,72,75,78,80,85,88]
     
-
 #    parse_raw_data(params, nrows=None)
     
-    filelist = glob.glob(params().paths['parsed_news']+'boersen*.pkl') 
 #
     lemmatizer = lemmy.load("da")
-    lda_instance = LDA(filelist, lemmatizer, test_share=0.02)
+    lda_instance = LDA(lemmatizer, test_share=0.02)
 #    
-    create_dictionary(lda_instance, load_bigrams=False)
+    create_dictionary(lda_instance, load_bigrams=True)
     create_corpus(lda_instance)
 #
 ##    lda_instance.lda_models, coherence_scores = optimize_topics(lda_instance, topics, plot=False)
@@ -48,7 +46,7 @@ if __name__ == "__main__":
     load_model(lda_instance, 80)
 #
 #        
-    print_topics(lda_instance,topn=50,unique_sort=True)
+#    print_topics(lda_instance,topn=50,unique_sort=True)
 #    
 #    jsd = []
 #    for topic in topics:
@@ -57,7 +55,7 @@ if __name__ == "__main__":
 #        print(f"Model with {topic} topics has jsd {jsd_:.6f}")
 #        jsd.append(jsd_)
 
-    #merge_documents_and_topics(filelist, lda_instance, params)
+    merge_documents_and_topics(lda_instance)
 #
 #     
 #    df_co = pd.read_csv('coherence.csv',header=None,names=['topics','coherence'])

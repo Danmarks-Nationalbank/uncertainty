@@ -4,10 +4,12 @@ import os
 import pandas as pd
 import pickle
 import re
+import h5py
+import numpy as np
 import warnings
 import glob
 import html
-from src.fui.utils import dump_pickle, params
+from src.fui.utils import params, dump_hdf
 
 def parse_raw_data(nrows=None):
     """
@@ -79,16 +81,24 @@ def parse_raw_data(nrows=None):
     #create unique row index
     df['article_id'] = df.reset_index().index
     
+    df['ArticleContents'] = __clean_text(df['ArticleContents'])
+    df['word_count'] = df['ArticleContents'].str.count(' ') + 1
+    df = df[df.word_count >= 50] 
+    print('Columns: ', df.columns)
+    df[['Title', 'ArticleContents', 'Supplier']] = df[['Title', 'ArticleContents', 'Supplier']].astype('str')
+    df = df[['Title', 'ArticleContents', 'ArticleDateCreated', 'Supplier', 'article_id', 'word_count']]
+    
+    with h5py.File(os.path.join(params().paths['parsed_news'],params().filenames['parsed_news']), 'w') as hf:
+        string_dt = h5py.string_dtype(encoding='utf-8')
+        hf.create_dataset('parsed_strings', data=df, dtype=string_dt)
+    
+    
     #process in yearly chunks
-    df['Year'] = df['ArticleDateCreated'].dt.year
-    for year in df['Year'].unique():
-        print('Processing articles from {}'.format(year))
-        df_year = df.loc[df['Year'] == year]
-        df_year['ArticleContents'] = __clean_text(df_year['ArticleContents'])
-        df_year['word_count'] = df_year['ArticleContents'].str.count(' ') + 1
-        df_year = df_year[df_year.word_count >= 50] 
-        print('Columns: ', df_year.columns)
-        dump_pickle(params().paths['parsed_news'],params().filenames['parsed_news']+'_'+str(year)+'.pkl',df_year)
+#    df['Year'] = df['ArticleDateCreated'].dt.year
+#    for year in df['Year'].unique():
+#        print('Processing articles from {}'.format(year))
+#        df_year = df.loc[df['Year'] == year]
+#        
 
 def __clean_text(series):
     """

@@ -17,8 +17,10 @@
 		"bloom_scores": "bloom_scores",
 		"lda_cleaned_text": "parsed_strings.hdf5",
 		"lda_dictionary": "dictionary.pkl",
-		"lda_merge_doc_topics_file": "document_topics.pkl",
-		"parsed_news": "boersen_parsed"
+		"lda_merge_doc_topics_file": "document_topics.h5",
+		"parsed_news": "boersen_parsed.h5",
+		"parsed_news_uc_ext": "boersen_parsed_uc_ext.h5",
+		"parsed_news_uc": "boersen_parsed_uc.h5"
 	},
 	"dicts": {
 		"bloom": {
