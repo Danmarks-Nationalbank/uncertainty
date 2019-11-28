@@ -2,9 +2,9 @@ import os
 import sys
 #hacky spyder crap
 #sys.path.insert(1, 'C:\\Users\\EGR\\AppData\\Roaming\\Python\\Python37\\site-packages')
-sys.path.insert(1, 'D:\\projects\\FUI')
-sys.path.insert(1, 'D:\\projects\\FUI\\env\\Lib\\site-packages')
 sys.path.insert(1, 'C:\\Users\\EGR\\AppData\\Roaming\\Python\\Python37\\site-packages')
+sys.path.insert(1, 'D:\\projects\\FUI\\src')
+sys.path.insert(1, 'D:\\projects\\FUI\\env\\Lib\\site-packages')
 #sys.path.remove('C:\\ProgramData\\Anaconda3\\lib\\site-packages')
 import pandas as pd
 import numpy as np
@@ -55,7 +55,8 @@ if __name__ == "__main__":
 #        print(f"Model with {topic} topics has jsd {jsd_:.6f}")
 #        jsd.append(jsd_)
 
-    merge_documents_and_topics(lda_instance)
+    #merge_documents_and_topics(lda_instance)
+    df = print_topics(lda_instance, unique_sort=True)
 #
 #     
 #    df_co = pd.read_csv('coherence.csv',header=None,names=['topics','coherence'])

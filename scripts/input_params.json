@@ -1,7 +1,7 @@
 ﻿{
 	"paths": {
 		"root" : "C:\\projects\\FUI\\",
-        "enriched_text": "data\\intermediate\\enriched_news\\",
+        "enriched_news": "data\\intermediate\\enriched_news\\",
         "firm_events": "data\\intermediate\\firm_events\\",
 		"lda": "data\\intermediate\\lda\\",
 		"doc_topics": "data\\intermediate\\lda\\document_topics\\",
@@ -36,11 +36,19 @@
 		"uncertainty": {
 			"uncertainty": ["usik", "usikker", "uvis", "mistro"]
 		},
+		"uncertainty_ext": {
+    			"uncertainty": ["usik","uvis","mistro","usikkert","usikr","uklart","uklar","uvist","mistro","mistroed","mistroisk","mistænksom","forment","chance","risiko"]
+		},	
+
 		"bloom_extended_unstem": {
 			"economic": ["erhverv", "forretning", "handel", "økonomi", "økonomisk"],
 			"political": ["politik", "regulering", "skat", "udgift", "underskud", "nationalbanken", "folketinget", "regeringen", "ECB", "Washington", "EU", "Bruxelles", "Bryssel"],
 			"uncertainty": ["usikkerhed", "usikker", "uvis", "mistro"]
+		},
+		"negations": {
+			"negations": ["ikke sikker", "ikke er sikker", "ikke helt sikker", "langt fra sikker", "sikker havn", "sikker-havn"]
 		}
+		
 	},
 	"options": {
 		"bloom_logic": {

@@ -13,9 +13,9 @@ from itertools import cycle, islice
 from collections import Counter
 from functools import partial
 from matplotlib import pyplot as plt
-from matplotlib import colors
+from matplotlib.colors import LinearSegmentedColormap
 from multiprocessing import Pool
-#from wordcloud import WordCloud
+from wordcloud import WordCloud
 import lemmy
 #from langdetect import detect
 
@@ -97,7 +97,8 @@ def print_topics(lda_instance, topn=30, unique_sort=True):
             names=['token', 'topic'])
         df = df.unstack(level=0)
         df.to_csv(csv_path,header=header,encoding='utf-8-sig',index=False)
-                
+    return df
+        
 def optimize_topics(lda_instance, topics_to_optimize, plot=False, plot_title=""):
     coherence_scores = []
     lda_models = []
@@ -450,7 +451,7 @@ def merge_documents_and_topics(lda_instance):
                            'topics': [[x[1] for x in document_topics[i]] for i in range(len(document_topics))]})
 
     # Merge the enriched data onto LDA-projections
-    df_enriched_lda = pd.merge(df_lda, articles['article_id', 'Title', 'ArticleDateCreated'],
+    df_enriched_lda = pd.merge(df_lda, articles[['article_id', 'Title', 'ArticleDateCreated']],
                                how='inner',
                                on='article_id')
 
@@ -496,6 +497,32 @@ def generate_wordclouds(lda_instance, num_words=15):
 
             file_path = os.path.join(folder_path, '{}.png'.format(topic_num))
             plt.savefig(file_path, bbox_inches='tight')
+            
+def generate_wordclouds2(lda_instance, topics, num_words=15):
+    colors = ["#000000", "#111111", "#101010", "#121212", "#212121", "#222222"]
+    cmap = LinearSegmentedColormap.from_list("mycmap", colors)
+
+    cloud = WordCloud(background_color='white', font_path='C:/WINDOWS/FONTS/TAHOMA.TTF', stopwords=[],
+                      collocations=False, colormap=cmap, max_words=200, width=1000, height=600)
+
+    print("Generating wordclouds... {}:".format(timestamp()))
+
+    print("\t{} topics...".format(lda_model.num_topics))
+
+    folder_path = os.path.join(params().paths['lda'], 'wordclouds_' + str(lda_model.num_topics))
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+
+    topics_list = lda_instance.lda_model.show_topics(formatted=False, num_topics=-1, num_words=num_words)
+    for topic_num in range(0, lda_model.num_topics):
+        topic_words = dict(topics[topic_num][1])
+        cloud.generate_from_frequencies(topic_words)
+        plt.gca().imshow(cloud)
+        plt.gca().set_title('Topic {}'.format(topic_num), fontdict=dict(size=12))
+        plt.gca().axis('off')
+
+        file_path = os.path.join(folder_path, '{}.png'.format(topic_num))
+        plt.savefig(file_path, bbox_inches='tight')
 
 
 def dominating_sentence_per_topic(lda_instance, lda_model, corpus):

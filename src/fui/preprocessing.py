@@ -9,7 +9,7 @@ import numpy as np
 import warnings
 import glob
 import html
-from src.fui.utils import params, dump_hdf
+from fui.utils import params, dump_hdf
 
 def parse_raw_data(nrows=None):
     """

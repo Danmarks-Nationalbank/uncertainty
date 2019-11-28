@@ -54,11 +54,14 @@ def read_h5py(file_path, obj='parsed_strings'):
                            3: 'Supplier', 
                            4: 'article_id', 
                            5: 'word_count'}, inplace=True)
+        df['ArticleDateCreated'] = pd.to_datetime(df['ArticleDateCreated'])
         df['article_id'] = df['article_id'].astype('int')
         df['word_count'] = df['word_count'].astype('int')
-        if df.shape[0] == 7:
+        if len(df.columns) > 6:
             df.rename(columns={6:'u_count'}, inplace=True)
             df['u_count'] = df['u_count'].astype('int')
+            df.rename(columns={7:'n_count'}, inplace=True)
+            df['n_count'] = df['n_count'].astype('int')
         return df
     except FileNotFoundError:
         print("File not found!")

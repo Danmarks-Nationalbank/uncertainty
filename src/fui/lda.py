@@ -12,8 +12,8 @@ import warnings
 import json
 import lemmy
 
-from src.fui.ldatools import preprocess
-from src.fui.utils import timestamp, params, read_h5py
+from fui.ldatools import preprocess
+from fui.utils import timestamp, params, read_h5py
 
 from collections import Counter
 from datetime import timedelta, datetime
@@ -21,7 +21,7 @@ from functools import partial
 from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 from multiprocessing import Pool
-#from wordcloud import WordCloud
+from wordcloud import WordCloud
 from nltk.stem.snowball import SnowballStemmer
 
 
