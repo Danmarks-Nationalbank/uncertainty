@@ -81,7 +81,7 @@ class BaseIndexer():
         vix['vix'] = _normalize(vix['vix'])
                    
         return v1x, vix
-
+    
     def parse_topic_labels(self,name):
         """
         reads hand labeled topics from json file.
@@ -122,7 +122,7 @@ class BaseIndexer():
             dump_csv(params().paths['indices'], self.name+'_'+self.frq, idx, verbose=False)
         return idx
 
-    def plot_index(self, plot_vix=True, annotate=True, title=None):
+    def plot_index(self, plot_vix=True, plot_hh=True, annotate=True, title=None):
         """
         """
         out_path = params().paths['indices']
@@ -149,6 +149,12 @@ class BaseIndexer():
         if plot_vix:
             ax.plot(v1x.index, v1x.v1x, label='VDAX-NEW')
             ax.plot(vix.index, vix.vix, label='VIX')
+        if plot_hh:
+            with open(params().paths['input']+'hh_transactions.pkl', 'rb') as f:
+                df_hh = pickle.load(f)
+            df_hh = df_hh[str(self.start_year):str(self.end_year)+self.end_str]   
+            ax.plot(df_hh.index, df_hh.net_norm, label='HH NET')
+            
         ax.legend(frameon=False, loc='upper left')    
     
         ax.xaxis.set_major_locator(years)
@@ -515,24 +521,24 @@ if __name__ == '__main__':
     
     international = LDAIndexer(name='ep_int')
     international.build(num_topics=80,sample_size=0,topics=['EP_int'],topic_thold=0.02,frq='M')
-    international.plot_index(title='Economic policy uncertainty, international')
+    international.plot_index(title='Economic policy uncertainty, international', plot_vix=False, plot_hh=True)
     
-    international = LDAIndexer(name='ep_int')
-    international.build(num_topics=80,sample_size=0,topics=['EP_int'],topic_thold=0.02,frq='Q')
-    
-    domestic = LDAIndexer(name='ep_dk')
-    domestic.build(num_topics=80,sample_size=0,topics=['EP_dk'],topic_thold=0.02,frq='M')
-    domestic.plot_index(title='Economic policy uncertainty, domestic')
-    
-    domestic = LDAIndexer(name='ep_dk')
-    domestic.build(num_topics=80,sample_size=0,topics=['EP_dk'],topic_thold=0.02,frq='Q')
-    
-    agg = LDAIndexer(name='ep_all')
-    agg.build(num_topics=80,sample_size=0,topics=['EP'],topic_thold=0.02,frq='M')
-    agg.plot_index(title='Economic policy uncertainty, all')
-    
-    agg = LDAIndexer(name='ep_all')
-    agg.build(num_topics=80,sample_size=0,topics=['EP'],topic_thold=0.02,frq='Q')
+#    international = LDAIndexer(name='ep_int')
+#    international.build(num_topics=80,sample_size=0,topics=['EP_int'],topic_thold=0.02,frq='Q')
+#    
+#    domestic = LDAIndexer(name='ep_dk')
+#    domestic.build(num_topics=80,sample_size=0,topics=['EP_dk'],topic_thold=0.02,frq='M')
+#    domestic.plot_index(title='Economic policy uncertainty, domestic')
+#    
+#    domestic = LDAIndexer(name='ep_dk')
+#    domestic.build(num_topics=80,sample_size=0,topics=['EP_dk'],topic_thold=0.02,frq='Q')
+#    
+#    agg = LDAIndexer(name='ep_all')
+#    agg.build(num_topics=80,sample_size=0,topics=['EP'],topic_thold=0.02,frq='M')
+#    agg.plot_index(title='Economic policy uncertainty, all')
+#    
+#    agg = LDAIndexer(name='ep_all')
+#    agg.build(num_topics=80,sample_size=0,topics=['EP'],topic_thold=0.02,frq='Q')
     
     #xidx = LDAIndexer(name='xidx_int_f')
     #xidx.build(num_topics=80,labels='meta_topics',sample_size=0,xsection=['International F','International politics'],xsection_thold=0.1,u_weight=True)

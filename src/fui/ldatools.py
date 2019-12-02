@@ -385,7 +385,7 @@ def get_perplexity(lda_model, lda_instance, chunksize=2000):
     perplexity = np.exp2(-lda_model.log_perplexity(test_corpus,len(lda_instance.articles)))
     return perplexity
 
-def _get_scaled_significance(lda_model, n_words=200):
+def _get_scaled_significance(lda_model, n_words=200, sort=True):
     _cols = ['token_id', 'weight', 'topic']
     df = pd.DataFrame(data=None, columns=_cols)
     num_topics = lda_model.num_topics
@@ -398,14 +398,15 @@ def _get_scaled_significance(lda_model, n_words=200):
     df = df.set_index(['token_id','topic'])
     df = df.join(df.groupby(level=0).sum(),how='inner',rsuffix='_sum').groupby(level=[0,1]).first()
     df['scaled_weight'] = df['weight']/df['weight_sum']
-    df.sort_values(['topic','scaled_weight'],inplace=True,ascending=False)
+    if sort:
+        df.sort_values(['topic','scaled_weight'],inplace=True,ascending=False)
     return df['scaled_weight']
 
-def get_unique_words(lda_model, lda_instance, topn=10):
+def get_unique_words(lda_instance, topn=10, sort=True):
     df_out = pd.DataFrame(data=None, columns=['scaled_weight','word'])
 
-    df = _get_scaled_significance(lda_model, topn)
-    for i in range(0,lda_model.num_topics,1):
+    df = _get_scaled_significance(lda_instance.lda_model, topn, sort=sort)
+    for i in range(0,lda_instance.lda_model.num_topics,1):
         tokens = []
         df_topic = df[df.index.get_level_values('topic') == i]
         df_topic = df_topic[0:topn]
@@ -470,61 +471,98 @@ def merge_documents_and_topics(lda_instance):
     df_enriched_lda = pd.concat([df2, df_enriched_lda[['article_id', 'Title', 'ArticleDateCreated']]], axis=1)
     del(df2)
     df_enriched_lda.to_hdf(os.path.join(folder_path,topics_path), 'table', format='table', mode='w', append=False)
-
-
-def generate_wordclouds(lda_instance, num_words=15):
-    colors = ["#000000", "#111111", "#101010", "#121212", "#212121", "#222222"]
-    cmap = LinearSegmentedColormap.from_list("mycmap", colors)
-
-    cloud = WordCloud(background_color='white', font_path='C:/WINDOWS/FONTS/TAHOMA.TTF', stopwords=[],
-                      collocations=False, colormap=cmap, max_words=200, width=1000, height=600)
-
-    print("Generating wordclouds... {}:".format(timestamp()))
-    for lda_model in lda_instance.lda_models:
-        print("\t{} topics...".format(lda_model.num_topics))
-
-        folder_path = os.path.join(params().paths['lda'], 'wordclouds_' + str(lda_model.num_topics))
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
-
-        topics = lda_model.show_topics(formatted=False, num_topics=-1, num_words=num_words)
-        for topic_num in range(0, lda_model.num_topics):
-            topic_words = dict(topics[topic_num][1])
-            cloud.generate_from_frequencies(topic_words)
-            plt.gca().imshow(cloud)
-            plt.gca().set_title('Topic {}'.format(topic_num), fontdict=dict(size=12))
-            plt.gca().axis('off')
-
-            file_path = os.path.join(folder_path, '{}.png'.format(topic_num))
-            plt.savefig(file_path, bbox_inches='tight')
             
-def generate_wordclouds2(lda_instance, topics, num_words=15):
-    colors = ["#000000", "#111111", "#101010", "#121212", "#212121", "#222222"]
-    cmap = LinearSegmentedColormap.from_list("mycmap", colors)
+def generate_wordclouds(lda_instance, topics=None, shade=True, num_words=15):
+    """
+    generates word cloud images. args:
+    topics: list of topics to cloud jointly, or int for single topics. 
+            None (default) draws every topic in a separate image.
+    shade: Set greyshade of word by "uniqueness" ranking. Less unique words are lighter.
+    num_words: Number of words in cloud.
+    """
+    
+    class MyColorFunctor():
+      def __init__(self,df,cmap):
+        self.df = df
+        self.cmap = cmap
+    
+      def __call__(self,word,font_size,position,orientation,random_state=None,**kwargs):
+        idx = int(self.df[self.df['word']==word]['index'])
+        #convert cmap color at index to RGB integer format
+        return tuple([int(255*x) for x in cmap(idx)[:3]])
+    
+    colors = ['#c1c1c2','#666666','#000000']
+    cmap = LinearSegmentedColormap.from_list("mycmap", colors, N=num_words)
 
     cloud = WordCloud(background_color='white', font_path='C:/WINDOWS/FONTS/TAHOMA.TTF', stopwords=[],
                       collocations=False, colormap=cmap, max_words=200, width=1000, height=600)
 
     print("Generating wordclouds... {}:".format(timestamp()))
 
-    print("\t{} topics...".format(lda_model.num_topics))
+    print("\t{} topics...".format(lda_instance.lda_model.num_topics))
 
-    folder_path = os.path.join(params().paths['lda'], 'wordclouds_' + str(lda_model.num_topics))
+    folder_path = os.path.join(params().paths['lda'], 'wordclouds_' + str(lda_instance.lda_model.num_topics))
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
+    if topics:
+        if (len(topics) > 1 or isinstance(topics, int)) and shade:
+            print("Warning: Will not shade by uniqueness with multiple topics")
+    
+    topic_list = lda_instance.lda_model.show_topics(formatted=False, num_topics=-1, num_words=num_words)
+    if shade:
+        df = pd.DataFrame([i[1] for i in topic_list]).T
+        dfu = get_unique_words(lda_instance, topn=num_words, sort=True)
 
-    topics_list = lda_instance.lda_model.show_topics(formatted=False, num_topics=-1, num_words=num_words)
-    for topic_num in range(0, lda_model.num_topics):
-        topic_words = dict(topics[topic_num][1])
+    if not topics:
+        for t in range(0, lda_instance.lda_model.num_topics):
+            if shade:
+                words = pd.DataFrame(df[t].tolist(), index=df.index, columns=['word', 'weight'])        
+                shades = dfu.xs(t, level=1, drop_level=False)
+                words = words.merge(shades, on='word').sort_values(by='scaled_weight').reset_index(drop=True).reset_index()
+                
+                cloud = WordCloud(background_color='white', font_path='C:/WINDOWS/FONTS/Nationalbank-Bold.TTF', stopwords=[],
+                                  collocations=False, color_func=MyColorFunctor(words,cmap), max_words=200, width=1000, height=600)
+                
+            else:   
+                cloud = WordCloud(background_color='white', font_path='C:/WINDOWS/FONTS/Nationalbank-Bold.TTF', stopwords=[],
+                                  collocations=False, colormap=cmap, max_words=200, width=1000, height=600)
+            
+            topic_words = dict(topic_list[t][1])
+            cloud.generate_from_frequencies(topic_words)                
+            plt.gca().imshow(cloud)
+            plt.gca().set_title('Topic {}'.format(t), fontdict=dict(size=12))
+            plt.gca().axis('off')
+    
+            file_path = os.path.join(folder_path, '{}.png'.format(t))
+            plt.savefig(file_path, bbox_inches='tight', dpi=300)
+    else:
+        word_dict = lda_instance.dictionary.id2token
+        num_tokens = len(lda_instance.dictionary)
+        if isinstance(topics, int):
+            topics = [topics]
+        topic_list = [t for (i,t) in enumerate(topic_list) if i in topics]
+        dft = pd.DataFrame(range(num_tokens), columns=['token_id'])
+        for i,t in enumerate(topics):
+            #topic_words = dict(topic_list[t][1])
+            df = pd.DataFrame(lda_instance.lda_model.get_topic_terms(t,num_tokens),
+                              columns=['token_id',f'weight{t}'])
+            dft = dft.merge(df, on='token_id')
+        dft = pd.DataFrame(dft.loc[:, [x for x in dft.columns if x.startswith('weight')]].mean(axis=1), columns=['weight']).reset_index()
+        dfw = pd.DataFrame(word_dict.values(), index=word_dict.keys(), columns=['word']).reset_index()
+        dft = dft.merge(dfw, on='index', how='inner')
+        dft = dft.sort_values('weight',ascending=False).iloc[0:15,:]
+        
+        topic_words = dict(list(zip(*map(dft.get, ['word','weight']))))
+        cloud = WordCloud(background_color='white', font_path='C:/WINDOWS/FONTS/Nationalbank-Bold.TTF', stopwords=[],
+                              collocations=False, color_func=lambda *args, **kwargs: "black", max_words=200, width=1000, height=600)
         cloud.generate_from_frequencies(topic_words)
         plt.gca().imshow(cloud)
-        plt.gca().set_title('Topic {}'.format(topic_num), fontdict=dict(size=12))
+        plt.gca().set_title('Topic(s): {}'.format(', '.join(str(x) for x in topics)), 
+                            fontdict=dict(size=12))
         plt.gca().axis('off')
-
-        file_path = os.path.join(folder_path, '{}.png'.format(topic_num))
-        plt.savefig(file_path, bbox_inches='tight')
-
-
+        file_path = os.path.join(folder_path, '{}.png'.format('-'.join(str(x) for x in topics)))
+        plt.savefig(file_path, bbox_inches='tight', dpi=300)
+        
 def dominating_sentence_per_topic(lda_instance, lda_model, corpus):
     """
     Construct a dataframe that, for each topic, contains
