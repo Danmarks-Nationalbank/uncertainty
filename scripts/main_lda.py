@@ -46,7 +46,7 @@ if __name__ == "__main__":
     load_model(lda_instance, 80)
     labels = parse_topic_labels('labels', 80)
     
-    word_list = print_topics(lda_instance,topn=8,unique_sort=False)
+    word_list = print_topics(lda_instance,topn=30,unique_sort=False)
     df = pd.DataFrame(word_list)
     for col in df.columns:
         df.rename(columns={col:labels[str(col)][0]}, inplace=True)
