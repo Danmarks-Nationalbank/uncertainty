@@ -34,13 +34,18 @@ def parse_raw_data(nrows=None):
     df = df[df['SectionName'].str.isnumeric() == False]
     end_n = df.shape[0]
     print('Dropped {} articles with ID as SectionName'.format(start_n-end_n))
+
+    df['ArticleDateCreated'] = pd.to_datetime(df['ArticleDateCreated'], format='%Y-%m-%d')
+    df['Year'] = df['ArticleDateCreated'].dt.year
+    df = df[df['Year'] > 1999]
     
     #drop some suppliers
     start_n = df.shape[0] 
     df = df[df['Supplier'].isin(['Blog', 'Ritzau', 'Børsen', 'E-Avis', 'ePaper', 'Borsen'])]
     end_n = df.shape[0]
     print('Dropped {} articles with bad suppliers'.format(start_n-end_n))
-    
+
+    print(f'Current number of articles: {end_n}')
     #drop irrelevant section names
     start_n = df.shape[0] 
     df = df[~df['SectionName'].isin(['Bagsiden','Hvad kan vi danskere','Pleasure',
@@ -66,6 +71,7 @@ def parse_raw_data(nrows=None):
     df = df[df['ShowOnWebSite'] == 'Yes']
     end_n = df.shape[0]
     print('Dropped {} articles not shown on website'.format(start_n-end_n))
+    print(f'Current number of articles: {end_n}')
     
     #drop unneccessary columns
     df.drop(labels=[
@@ -73,10 +79,8 @@ def parse_raw_data(nrows=None):
             'SAXoInternalId',
             'SAXoSectionPageNumber', 
             'SAXoCategory', 
-            'SAXoByline', 
+            'SAXoByline',
             'SAXoHeadline'], inplace=True, axis=1)
-
-    df['ArticleDateCreated'] = pd.to_datetime(df['ArticleDateCreated'], format='%Y-%m-%d')
     
     #create unique row index
     df['article_id'] = df.reset_index().index
@@ -84,9 +88,13 @@ def parse_raw_data(nrows=None):
     df['ArticleContents'] = __clean_text(df['ArticleContents'])
     df['word_count'] = df['ArticleContents'].str.count(' ') + 1
     df = df[df.word_count >= 50] 
+    end_n = df.shape[0]
+    print(f'Current number of articles: {end_n}')
     print('Columns: ', df.columns)
     df[['Title', 'ArticleContents', 'Supplier']] = df[['Title', 'ArticleContents', 'Supplier']].astype('str')
     df = df[['Title', 'ArticleContents', 'ArticleDateCreated', 'Supplier', 'article_id', 'word_count']]
+    
+    df.describe()
     
     with h5py.File(os.path.join(params().paths['parsed_news'],params().filenames['parsed_news']), 'w') as hf:
         string_dt = h5py.string_dtype(encoding='utf-8')

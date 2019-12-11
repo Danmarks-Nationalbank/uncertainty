@@ -22,7 +22,7 @@ from fui.utils import main_directory, dump_pickle, dump_csv, params
 from fui.ldatools import preprocess, optimize_topics, create_dictionary, create_corpus, save_models, load_model, load_models
 from fui.ldatools import generate_wordclouds, merge_documents_and_topics, get_unique_words
 from fui.ldatools import get_unique_words, jsd_measure
-from fui.ldatools import print_topics
+from fui.ldatools import print_topics, parse_topic_labels
 from fui.preprocessing import parse_raw_data, load_parsed_data
 
 if __name__ == "__main__":
@@ -41,9 +41,20 @@ if __name__ == "__main__":
 #    lda_instance.lda_models, coherence_scores = optimize_topics(lda_instance, topics, plot=False)
 #    save_models(lda_instance, params)
     
+    pd.set_option('max_colwidth', 100)
+
     load_model(lda_instance, 80)
-       
-#    print_topics(lda_instance,topn=50,unique_sort=True)
+    labels = parse_topic_labels('labels', 80)
+    
+    word_list = print_topics(lda_instance,topn=8,unique_sort=False)
+    df = pd.DataFrame(word_list)
+    for col in df.columns:
+        df.rename(columns={col:labels[str(col)][0]}, inplace=True)
+    
+    dft = df.transpose()
+    dft = dft.reset_index()
+    dft['text'] = dft.iloc[:,1:10].apply(lambda x: ', '.join(x), axis=1)
+    latex = dft.to_latex(columns=['index','text'])
 #    
 #    jsd = []
 #    for topic in topics:
@@ -58,7 +69,8 @@ if __name__ == "__main__":
     
     
 #    dfu = get_unique_words(lda_instance, topn=15, sort=True)
-    generate_wordclouds(lda_instance,shade=True)
+    #generate_wordclouds(lda_instance,shade=True,title='Monetary policy',num_words=20,topics=69)
+
 
 #    define_NB_colors()
 #

@@ -7,7 +7,9 @@ import pandas as pd
 import pickle
 import random
 import csv
+import json
 import copy
+import codecs
 
 from itertools import cycle, islice
 from collections import Counter
@@ -87,7 +89,8 @@ def print_topics(lda_instance, topn=30, unique_sort=True):
             csvwriter.writerow(header)
             for i in range(topn):
                 csvwriter.writerow(word_lists[i])
-            
+        return word_lists
+        
     else: 
         df = get_unique_words(lda_model, lda_instance, topn)
 
@@ -97,7 +100,7 @@ def print_topics(lda_instance, topn=30, unique_sort=True):
             names=['token', 'topic'])
         df = df.unstack(level=0)
         df.to_csv(csv_path,header=header,encoding='utf-8-sig',index=False)
-    return df
+        return df
         
 def optimize_topics(lda_instance, topics_to_optimize, plot=False, plot_title=""):
     coherence_scores = []
@@ -472,7 +475,7 @@ def merge_documents_and_topics(lda_instance):
     del(df2)
     df_enriched_lda.to_hdf(os.path.join(folder_path,topics_path), 'table', format='table', mode='w', append=False)
             
-def generate_wordclouds(lda_instance, topics=None, shade=True, num_words=15):
+def generate_wordclouds(lda_instance, topics=None, shade=True, title=None, num_words=15):
     """
     generates word cloud images. args:
     topics: list of topics to cloud jointly, or int for single topics. 
@@ -489,13 +492,11 @@ def generate_wordclouds(lda_instance, topics=None, shade=True, num_words=15):
       def __call__(self,word,font_size,position,orientation,random_state=None,**kwargs):
         idx = int(self.df[self.df['word']==word]['index'])
         #convert cmap color at index to RGB integer format
+        print(tuple([int(255*x) for x in cmap(idx)[:3]]))
         return tuple([int(255*x) for x in cmap(idx)[:3]])
     
     colors = ['#c1c1c2','#666666','#000000']
     cmap = LinearSegmentedColormap.from_list("mycmap", colors, N=num_words)
-
-    cloud = WordCloud(background_color='white', font_path='C:/WINDOWS/FONTS/TAHOMA.TTF', stopwords=[],
-                      collocations=False, colormap=cmap, max_words=200, width=1000, height=600)
 
     print("Generating wordclouds... {}:".format(timestamp()))
 
@@ -505,7 +506,7 @@ def generate_wordclouds(lda_instance, topics=None, shade=True, num_words=15):
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
     if topics:
-        if (len(topics) > 1 or isinstance(topics, int)) and shade:
+        if isinstance(topics, list) and shade:
             print("Warning: Will not shade by uniqueness with multiple topics")
     
     topic_list = lda_instance.lda_model.show_topics(formatted=False, num_topics=-1, num_words=num_words)
@@ -539,28 +540,47 @@ def generate_wordclouds(lda_instance, topics=None, shade=True, num_words=15):
         word_dict = lda_instance.dictionary.id2token
         num_tokens = len(lda_instance.dictionary)
         if isinstance(topics, int):
-            topics = [topics]
-        topic_list = [t for (i,t) in enumerate(topic_list) if i in topics]
-        dft = pd.DataFrame(range(num_tokens), columns=['token_id'])
-        for i,t in enumerate(topics):
-            #topic_words = dict(topic_list[t][1])
-            df = pd.DataFrame(lda_instance.lda_model.get_topic_terms(t,num_tokens),
-                              columns=['token_id',f'weight{t}'])
-            dft = dft.merge(df, on='token_id')
-        dft = pd.DataFrame(dft.loc[:, [x for x in dft.columns if x.startswith('weight')]].mean(axis=1), columns=['weight']).reset_index()
-        dfw = pd.DataFrame(word_dict.values(), index=word_dict.keys(), columns=['word']).reset_index()
-        dft = dft.merge(dfw, on='index', how='inner')
-        dft = dft.sort_values('weight',ascending=False).iloc[0:15,:]
-        
-        topic_words = dict(list(zip(*map(dft.get, ['word','weight']))))
-        cloud = WordCloud(background_color='white', font_path='C:/WINDOWS/FONTS/Nationalbank-Bold.TTF', stopwords=[],
+            if shade:
+                words = pd.DataFrame(df[topics].tolist(), index=df.index, columns=['word', 'weight'])        
+                shades = dfu.xs(topics, level=1, drop_level=False)
+                words = words.merge(shades, on='word').sort_values(by='scaled_weight').reset_index(drop=True).reset_index()
+                print(words)
+                cloud = WordCloud(background_color='white', font_path='C:/WINDOWS/FONTS/Nationalbank-Bold.TTF', stopwords=[],
+                                  collocations=False, color_func=MyColorFunctor(words,cmap), max_words=200, width=1000, height=600)
+            else:
+                cloud = WordCloud(background_color='white', font_path='C:/WINDOWS/FONTS/Nationalbank-Bold.TTF', stopwords=[],
+                                      collocations=False, color_func=lambda *args, **kwargs: "black", max_words=200, width=1000, height=600)
+                
+            topic_words = dict(topic_list[topics][1])  
+            if not title:
+                file_path = os.path.join(folder_path, f'{title}.png')
+                title = f'Topic {topics}'
+            else:
+                file_path = os.path.join(folder_path, f'{title}.png')
+        else:
+            cloud = WordCloud(background_color='white', font_path='C:/WINDOWS/FONTS/Nationalbank-Bold.TTF', stopwords=[],
                               collocations=False, color_func=lambda *args, **kwargs: "black", max_words=200, width=1000, height=600)
+            file_path = os.path.join(folder_path, '{}.png'.format('-'.join(str(x) for x in topics)))
+            topic_list = [t for (i,t) in enumerate(topic_list) if i in topics]
+            dft = pd.DataFrame(range(num_tokens), columns=['token_id'])
+            for i,t in enumerate(topics):
+                #topic_words = dict(topic_list[t][1])
+                df = pd.DataFrame(lda_instance.lda_model.get_topic_terms(t,num_tokens),
+                                  columns=['token_id',f'weight{t}'])
+                dft = dft.merge(df, on='token_id')
+            dft = pd.DataFrame(dft.loc[:, [x for x in dft.columns if x.startswith('weight')]].mean(axis=1), columns=['weight']).reset_index()
+            dfw = pd.DataFrame(word_dict.values(), index=word_dict.keys(), columns=['word']).reset_index()
+            dft = dft.merge(dfw, on='index', how='inner')
+            dft = dft.sort_values('weight',ascending=False).iloc[0:15,:]
+            
+            topic_words = dict(list(zip(*map(dft.get, ['word','weight']))))
+            if not title:
+                title = 'Topic(s): {}'.format(', '.join(str(x) for x in topics))
+        
         cloud.generate_from_frequencies(topic_words)
         plt.gca().imshow(cloud)
-        plt.gca().set_title('Topic(s): {}'.format(', '.join(str(x) for x in topics)), 
-                            fontdict=dict(size=12))
+        plt.gca().set_title(title, fontdict=dict(size=12), fontname='Nationalbank')
         plt.gca().axis('off')
-        file_path = os.path.join(folder_path, '{}.png'.format('-'.join(str(x) for x in topics)))
         plt.savefig(file_path, bbox_inches='tight', dpi=300)
         
 def dominating_sentence_per_topic(lda_instance, lda_model, corpus):
@@ -737,4 +757,14 @@ def _smooth(y, smoothing_points):
     y_smooth = np.convolve(y, box, mode='valid')
     return y_smooth
 
-
+def parse_topic_labels(name,num_topics):
+    """
+    reads hand labeled topics from json file.
+    
+    """
+    label_path = os.path.join(params().paths['topic_labels'], 
+                              name+str(num_topics)+'.json')
+      
+    with codecs.open(label_path, 'r', encoding='utf-8-sig') as f:
+        labels = json.load(f)
+    return labels

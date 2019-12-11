@@ -4,6 +4,8 @@ import gensim
 import numpy as np
 import pandas as pd
 import pickle
+import codecs
+import json
 from matplotlib import pyplot as plt
 from matplotlib.collections import LineCollection
 import scipy.cluster.hierarchy as hierarchy
@@ -18,7 +20,8 @@ class ClusterTree():
     :metric: and :method: Used for HAC.
     """
     
-    def __init__(self, num_topics, metric='jensenshannon', method='single'):
+    def __init__(self, num_topics, metric='jensenshannon', method='ward', 
+                 unique_scale=True, topn=None):
         """
         Saves linkage matrix :Z: and :nodelist:
         """
@@ -32,9 +35,29 @@ class ClusterTree():
                                    'lda_model_' + str(self.num_topics))
         file_path = os.path.join(folder_path, 'trained_lda')
         self.lda_model = gensim.models.LdaMulticore.load(file_path)
-        y = pdist(self.lda_model.get_topics(), metric=self.metric)
+        topics = self.lda_model.get_topics()
+        if unique_scale:
+            topics = topics/(topics.sum(axis=0))
+        if topn:
+            topics.sort(axis=1)
+            topics = np.flip(topics,axis=1)
+            topics = topics[:,0:topn]
+        y = pdist(topics, metric=self.metric)
         self.Z = hierarchy.linkage(y, method=self.method)
         rootnode, self.nodelist = hierarchy.to_tree(self.Z,rd=True)
+    
+    def parse_topic_labels(self,name):
+        """
+        reads hand labeled topics from json file.
+        
+        """
+        label_path = os.path.join(params().paths['topic_labels'], 
+                                  name+str(self.num_topics)+'.json')
+          
+        with codecs.open(label_path, 'r', encoding='utf-8-sig') as f:
+            self.labels = json.load(f)
+        return self.labels
+    
     
     def _get_children(self, id):
         """
@@ -58,12 +81,11 @@ class ClusterTree():
     def _get_topic_sums(self):
         """
         Get sum of topic probabilities across articles.
-        """
-        with open(params().paths['doc_topics']+'document_topics.pkl', 'rb') as f:
-            df = pickle.load(f)
-
-        df_topics = df['topics'].apply(pd.Series)
-        self.topic_sums = df_topics.sum(axis=0,numeric_only=True)
+        """        
+        df = pd.read_hdf(params().paths['doc_topics']+'doc_topics_u_count_extend.h5', 'table')
+        df = df.iloc[:,0:self.num_topics].values.tolist()
+        
+        self.topic_sums = np.array(df).sum(axis=0)
     
     def get_node_weights(self):
         self._get_topic_sums()
@@ -106,18 +128,18 @@ class ClusterTree():
         _list.append(str(k))
         return ', '.join(_list)
         
-    def dendrogram(self,w=12,h=18,colors=10,color_labels=True,weight_nodes=True):
+    def dendrogram(self,w=12,h=17,colors=10,
+                   color_labels=True,weight_nodes=True,annotate=True):
         """
         Draws dendrogram
         :colors: Approx. no of color clusters in figure.
         """
-        from fui.indices import parse_topic_labels
-        self.labels = parse_topic_labels(self.num_topics,'labels')
+        self.labels = self.parse_topic_labels('labels')
         self.colors = colors
         fig = plt.figure(figsize=(w,h)) 
         plt.title("Topic Dendrogram")
         plt.xlabel("Distance")
-        plt.ylabel("Topic")
+        #plt.ylabel("Topic")
         
         R = hierarchymod.dendrogram(self.Z,
                        orientation='right',
@@ -180,8 +202,23 @@ class ClusterTree():
             ylbls = self.ax.get_ymajorticklabels()
             for c,y in enumerate(ylbls):
                 y.set_color(self.cluster_idxs[c])
-       
-        
+            
+            #tempfix
+            self.ax.get_ymajorticklabels()[21].set_color(self.cluster_idxs[20])
+            
+        self.ax.set_xlim(left=0.6)
+        if annotate:
+            self.ax.annotate("Macroeconomics", (1.05,42))
+            self.ax.annotate("Financial markets", (1.08,129))
+            self.ax.annotate("Politics, domestic", (0.94,179))
+            self.ax.annotate("Politics, \ninternational", (1.03,220))
+            self.ax.annotate("Entertainment", (0.97,269))
+            self.ax.annotate("Corporate", (1.025,333))
+            self.ax.annotate("Crime", (0.925,405))
+            self.ax.annotate("Conflict", (0.975,430))
+            self.ax.annotate("Industry", (1.11,567))
+            self.ax.annotate("Environment", (1.01,777))
+                
         plt.tight_layout()
         fig.savefig(os.path.join(params().paths['lda'], 
                                    'dendrogram'+str(self.num_topics)+'.pdf'), dpi=300)
@@ -248,3 +285,9 @@ class ClusterTree():
         else:
             print('Criteria not implemented')
             return 0
+        
+        
+if __name__ == '__main__':
+    
+    cl80 = ClusterTree(80,metric='cosine')
+    fig, ax, R = cl80.dendrogram(colors=6)

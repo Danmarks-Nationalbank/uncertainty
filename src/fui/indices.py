@@ -2,8 +2,8 @@ import os
 import sys
 #hacky spyder crap
 #sys.path.insert(1, 'C:\\Users\\EGR\\AppData\\Roaming\\Python\\Python37\\site-packages')
-sys.path.insert(1, 'D:\\projects\\FUI\\src')
-sys.path.insert(1, 'D:\\projects\\FUI\\env\\Lib\\site-packages')
+sys.path.insert(1, 'C:\\projects\\FUI\\src')
+sys.path.insert(1, 'C:\\projects\\FUI\\env\\Lib\\site-packages')
 sys.path.insert(1, 'C:\\Users\\EGR\\AppData\\Roaming\\Python\\Python37\\site-packages')
 import pickle
 import json
@@ -25,8 +25,9 @@ from functools import partial
 from matplotlib import pyplot as plt
 
 #local imports
-from fui.cluster import ClusterTree
+#from src.fui.cluster import ClusterTree
 from fui.utils import dump_pickle, dump_csv, params, read_hdf, read_h5py
+from fui.preprocessing import parse_raw_data
 
 years = mdates.YearLocator()   # every year
 months = mdates.MonthLocator((1, 4, 7, 10))
@@ -118,11 +119,12 @@ class BaseIndexer():
         #idx.drop(pd.to_datetime('2019-05-31'), inplace=True)
         #dump_csv(folder_path,var+'_score_'+f+'.csv',idx)
         print("Last month: ", idx[-1:])
+        idx.to_pickle(params().paths['indices']+self.name+'_'+self.frq+'.pkl')
         if write_csv:
             dump_csv(params().paths['indices'], self.name+'_'+self.frq, idx, verbose=False)
         return idx
 
-    def plot_index(self, plot_vix=True, plot_hh=True, annotate=True, title=None):
+    def plot_index(self, plot_vix=True, plot_hh=False, annotate=True, title=None):
         """
         """
         out_path = params().paths['indices']
@@ -515,28 +517,30 @@ def uncertainty_count(extend=True):
 
 if __name__ == '__main__':
     
+    df = parse_raw_data()
+    
     #print(params().paths['enriched_news'])
     #uncertainty_count()
     #uncertainty_count(extend=False)
     
-    international = LDAIndexer(name='ep_int')
-    international.build(num_topics=80,sample_size=0,topics=['EP_int'],topic_thold=0.02,frq='M')
-    international.plot_index(title='Economic policy uncertainty, international', plot_vix=False, plot_hh=True)
-    
 #    international = LDAIndexer(name='ep_int')
-#    international.build(num_topics=80,sample_size=0,topics=['EP_int'],topic_thold=0.02,frq='Q')
+#    international.build(num_topics=80,sample_size=0,topics=['EP_int'],topic_thold=0.0,frq='M')
+#    international.plot_index(title='Economic policy uncertainty, international', plot_vix=False, plot_hh=True)
+#    
+#    international = LDAIndexer(name='ep_int')
+#    international.build(num_topics=80,sample_size=0,topics=['EP_int'],topic_thold=0.0,frq='Q')
 #    
 #    domestic = LDAIndexer(name='ep_dk')
-#    domestic.build(num_topics=80,sample_size=0,topics=['EP_dk'],topic_thold=0.02,frq='M')
+#    domestic.build(num_topics=80,sample_size=0,topics=['EP_dk'],topic_thold=0.0,frq='M')
 #    domestic.plot_index(title='Economic policy uncertainty, domestic')
 #    
 #    domestic = LDAIndexer(name='ep_dk')
-#    domestic.build(num_topics=80,sample_size=0,topics=['EP_dk'],topic_thold=0.02,frq='Q')
+#    domestic.build(num_topics=80,sample_size=0,topics=['EP_dk'],topic_thold=0.0,frq='Q')
 #    
 #    agg = LDAIndexer(name='ep_all')
-#    agg.build(num_topics=80,sample_size=0,topics=['EP'],topic_thold=0.02,frq='M')
+#    agg.build(num_topics=80,sample_size=0,topics=['EP'],topic_thold=0.0,frq='M')
 #    agg.plot_index(title='Economic policy uncertainty, all')
-#    
+##    
 #    agg = LDAIndexer(name='ep_all')
 #    agg.build(num_topics=80,sample_size=0,topics=['EP'],topic_thold=0.02,frq='Q')
     
