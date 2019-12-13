@@ -3,13 +3,10 @@
 import os
 import pandas as pd
 import pickle
-import re
 import h5py
-import numpy as np
-import warnings
 import glob
 import html
-from fui.utils import params, dump_hdf
+from fui.utils import params
 
 def parse_raw_data(nrows=None):
     """

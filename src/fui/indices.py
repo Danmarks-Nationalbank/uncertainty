@@ -1,13 +1,6 @@
 import os
-import sys
-#hacky spyder crap
-#sys.path.insert(1, 'C:\\Users\\EGR\\AppData\\Roaming\\Python\\Python37\\site-packages')
-sys.path.insert(1, 'C:\\projects\\FUI\\src')
-sys.path.insert(1, 'C:\\projects\\FUI\\env\\Lib\\site-packages')
-sys.path.insert(1, 'C:\\Users\\EGR\\AppData\\Roaming\\Python\\Python37\\site-packages')
 import pickle
 import json
-import glob
 import re
 import copy
 import h5py
@@ -23,31 +16,24 @@ from nltk.stem.snowball import SnowballStemmer
 from multiprocessing import Pool
 from functools import partial
 from matplotlib import pyplot as plt
-
-#local imports
-#from src.fui.cluster import ClusterTree
-from fui.utils import dump_pickle, dump_csv, params, read_hdf, read_h5py
-from fui.preprocessing import parse_raw_data
+from fui.utils import params, read_h5py, dump_csv
 
 years = mdates.YearLocator()   # every year
 months = mdates.MonthLocator((1, 4, 7, 10))
 years_fmt = mdates.DateFormatter('%Y')
 
 class BaseIndexer():
-#    def __init__(self, name, start_year=2000, end_year=2019, f='M'):
-#        self.name = name
-#        self.start_year = start_year
-#        self.end_year = end_year
-#        self.f = f
-#        self.corr = {}
-#        if end_year == 2019:
-#            self.end_str = '-05-31'
-#        else:
-#            self.end_str = ''
+    """Base class for constructing indicies.
+    init_args:
+    name (str): Name of the index. Ex: "international_trade_u_weighted"
+    """
     def __init__(self,name):
         self.name = name
         
     def validate(self):
+        """Method for calculating correlations with macro time-series 
+        and index/vix/vdax
+        """
         v1x, vix = self.load_vix(f='M')
         data = pd.read_csv(params().paths['input']+'validation.csv', header=0)
         data['date'] = pd.to_datetime(data['date'], format="%Ym%m") + pd.tseries.offsets.MonthEnd(1)
@@ -64,6 +50,11 @@ class BaseIndexer():
         return self.corr
     
     def load_vix(self,frq='M'):
+        """Loads vix and vdax from csv files
+        args:
+        frq = observation frequency for vix
+        returns: (df,df)
+        """
         v1x = pd.read_csv(params().paths['input']+'v1x_monthly.csv', 
                           names=['date','v1x'], header=0)
     
@@ -86,7 +77,10 @@ class BaseIndexer():
     def parse_topic_labels(self,name):
         """
         reads hand labeled topics from json file.
-        
+        args:
+        name (str): name of json file (num_topics must be suffix)
+        returns: 
+        (dict) with labels
         """
         label_path = os.path.join(params().paths['topic_labels'], 
                                   name+str(self.num_topics)+'.json')
@@ -98,9 +92,17 @@ class BaseIndexer():
 
     def aggregate(self, df, col='idx', norm=True, write_csv=True, method='mean'):
         """
-        aggregates to means within 
+        Aggregates to means within 
         each aggregation frequency
-        """    
+        args:
+        df (DataFrame): input data
+        col (str): column to aggregate
+        norm (bool): add column of normalized values
+        write_csv (bool): write result as csv.
+        method (str): agg_func, 'mean' or 'sum'
+        returns:
+        DataFrame of aggregation result with datetime index.
+        """     
         
         df.set_index('ArticleDateCreated', inplace=True, drop=False)
         idx = df[[col, 'ArticleDateCreated']].groupby(
@@ -126,6 +128,13 @@ class BaseIndexer():
 
     def plot_index(self, plot_vix=True, plot_hh=False, annotate=True, title=None):
         """
+        Plot index from df column named "idx_norm".
+        Args:
+        plot_vix (bool): Add series of vix and vdax to plot.
+        plot_hh (bool): Plot household equity transactions (not ready).
+        annotate (bool): Add event annotation to plot.
+        title (str): Plot title.
+        Returns: plt objects (figure,axes).
         """
         out_path = params().paths['indices']
         idx_col = 'idx_norm'
@@ -214,11 +223,35 @@ class BaseIndexer():
         fig.savefig(f'{out_path}{self.name}_{self.frq}_plot.png', dpi=300)
         return fig, ax
     
-class LDAIndexer(BaseIndexer):    
-    def build(self, labels='meta_topics', num_topics=80, start_year=2000, end_year=2019, frq='M', 
-              df=None, sample_size=0, topics=None, xsection=None, topic_thold=0.0, 
-              xsection_thold=0.1, main_topic=False, extend_u_dict=True, u_weight=False):
+class LDAIndexer(BaseIndexer):
+    """Class for constructing LDA indices."""    
+    
+    def build(self, df=None, labels='meta_topics', num_topics=80, start_year=2000, end_year=2019, 
+              frq='M', topics=None, xsection=None, topic_thold=0.0, 
+              xsection_thold=0.1, main_topic=False, extend_u_dict=True, u_weight=True):
+        """Calculates indicies.
         
+        args:
+        df (DataFrame): input data, if None then merge_lda_u().
+        labels (str): name of label json dict to use.
+        num_topics (int): number of topics in the LDA model.
+        start_year (int), end_year (int)=2019: window for the index.
+        frq (str): Final aggregation frequency, 'D', 'M' or 'Q'.
+        topics (optional, str, int or list of int): Topics to use, can be specifc as 
+            - topic_ids (int or list of ints)
+            - name of label dict
+        xsection (optional, list of str): list of label dicts with sets of topics 
+        topic_thold: probability threshold for a topics to be considered.
+        xsection_thold: probability threshold for topics in xsection to be considered.
+        main_topic (bool): Only consider highest probability topic. 
+        Must provide `topics´ if True.
+        extend_u_dict (bool): Use extended set of u-words.
+        u_weight (bool): Weight index by share of u-words.
+        
+        returns:
+        DataFrame of aggregated index. Also accessible as attribute `idx´.
+        """
+
         self.start_year = start_year
         self.end_year = end_year
         self.frq = frq
@@ -287,7 +320,6 @@ class BloomIndexer(BaseIndexer):
         """
         Finds for articles containing words in bloom dictionary. Saves result to disk.
         args:
-        params: dict of input_params
         dict_name: name of bloom dict in params
         logic: matching criteria in params
         """
@@ -411,6 +443,14 @@ def _load_u_count(sample_size=0,extend=True):
         return df
 
 def merge_lda_u(extend=True,sample_size=0,num_topics=80):
+    """Merges uncertainty counts and topic vectors.
+    args:
+        extend (bool): Use extended set of u-words.
+        sample_size (int): Return a random sample of articles.
+        num_topics (int): LDA model to use.
+    returns:
+        DataFrame with columns 'topics' and 'u_count'
+    """
     if extend:
         suffix='u_count_extend'
     else:
@@ -471,10 +511,9 @@ def extend_dict_w2v(dict_name, n_words=10):
 
 def uncertainty_count(extend=True):
     """
-    Finds for articles containing words in bloom dictionary. Saves result to disk.
+    Counts u-words in articles. Saves result as HDF to disk.
     args:
-    dict_name: name of bloom dict in params
-    logic: matching criteria in params
+        extend (bool): Use extended set of u-words
     """ 
 #    if extend:
 #        U_set = set(list(extend_dict_w2v(dict_name, n_words=10).values())[0])
@@ -514,40 +553,3 @@ def uncertainty_count(extend=True):
     with h5py.File(outpath, 'w') as hf:
         string_dt = h5py.string_dtype(encoding='utf-8')
         hf.create_dataset('parsed_strings', data=df, dtype=string_dt)
-
-if __name__ == '__main__':
-    
-    df = parse_raw_data()
-    
-    #print(params().paths['enriched_news'])
-    #uncertainty_count()
-    #uncertainty_count(extend=False)
-    
-#    international = LDAIndexer(name='ep_int')
-#    international.build(num_topics=80,sample_size=0,topics=['EP_int'],topic_thold=0.0,frq='M')
-#    international.plot_index(title='Economic policy uncertainty, international', plot_vix=False, plot_hh=True)
-#    
-#    international = LDAIndexer(name='ep_int')
-#    international.build(num_topics=80,sample_size=0,topics=['EP_int'],topic_thold=0.0,frq='Q')
-#    
-#    domestic = LDAIndexer(name='ep_dk')
-#    domestic.build(num_topics=80,sample_size=0,topics=['EP_dk'],topic_thold=0.0,frq='M')
-#    domestic.plot_index(title='Economic policy uncertainty, domestic')
-#    
-#    domestic = LDAIndexer(name='ep_dk')
-#    domestic.build(num_topics=80,sample_size=0,topics=['EP_dk'],topic_thold=0.0,frq='Q')
-#    
-#    agg = LDAIndexer(name='ep_all')
-#    agg.build(num_topics=80,sample_size=0,topics=['EP'],topic_thold=0.0,frq='M')
-#    agg.plot_index(title='Economic policy uncertainty, all')
-##    
-#    agg = LDAIndexer(name='ep_all')
-#    agg.build(num_topics=80,sample_size=0,topics=['EP'],topic_thold=0.02,frq='Q')
-    
-    #xidx = LDAIndexer(name='xidx_int_f')
-    #xidx.build(num_topics=80,labels='meta_topics',sample_size=0,xsection=['International F','International politics'],xsection_thold=0.1,u_weight=True)
-    #xidx.plot_index(title='International uncertainty')
-
-    
-    #bloom = BloomIndexer(name='bloom')
-    #bloom.build(logic='EandPandU',bloom_dict_name='bloom_extended',extend=True)

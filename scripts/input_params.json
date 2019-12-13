@@ -34,12 +34,11 @@
 			"uncertainty": ["usik", "usikker", "uvis", "mistro"]
 		},
 		"uncertainty": {
-			"uncertainty": ["usik", "usikker", "uvis", "mistro"]
+			"uncertainty": ["usikker", "usikkerhed", "usikkert"]
 		},
 		"uncertainty_ext": {
-    			"uncertainty": ["usik","uvis","mistro","usikkert","usikr","uklart","uklar","uvist","mistro","mistroed","mistroisk","mistænksom","forment","chance","risiko"]
+    			"uncertainty": ["forment","uklar","uklart","usik","usikker","uvist","usikkert"]
 		},	
-
 		"bloom_extended_unstem": {
 			"economic": ["erhverv", "forretning", "handel", "økonomi", "økonomisk"],
 			"political": ["politik", "regulering", "skat", "udgift", "underskud", "nationalbanken", "folketinget", "regeringen", "ECB", "Washington", "EU", "Bruxelles", "Bryssel"],

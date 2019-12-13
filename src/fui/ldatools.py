@@ -1,25 +1,21 @@
 import gensim
 #from gensim.models.callbacks import CoherenceMetric, PerplexityMetric, ConvergenceMetric
-import h5py
 import numpy as np
 import os
 import pandas as pd
-import pickle
 import random
 import csv
 import json
 import copy
 import codecs
 
-from itertools import cycle, islice
 from collections import Counter
 from functools import partial
 from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 from multiprocessing import Pool
 from wordcloud import WordCloud
-import lemmy
-#from langdetect import detect
+from langdetect import detect
 
 from fui.utils import timestamp, params, read_h5py
 
@@ -63,10 +59,6 @@ def preprocess(text, lemmatizer, stopfile='data/stopwords.txt'):
     return ' '.join([word for word in tokens])
 
 def print_topics(lda_instance, topn=30, unique_sort=True):
-#    topics = lda_model.get_topics()
-#    y = pdist(topics, metric='jensenshannon')
-#    Z = hac.linkage(y, method='ward')
-#    clusters = hac.fcluster(Z, t=0.8, criterion='distance')
     lda_model = lda_instance.lda_model
     
     csv_path = os.path.join(params().paths['lda'], 
@@ -105,12 +97,6 @@ def print_topics(lda_instance, topn=30, unique_sort=True):
 def optimize_topics(lda_instance, topics_to_optimize, plot=False, plot_title=""):
     coherence_scores = []
     lda_models = []
-    
-#    pl_holdout = PerplexityMetric(corpus=lda_instance.TestCorpus, logger="shell", title="Perplexity (hold_out)")
-#    ch_umass = CoherenceMetric(corpus=lda_instance.TrainCorpus, coherence="u_mass", logger="shell", title="Coherence (u_mass)")
-#    convergence_jc = ConvergenceMetric(distance="jaccard", logger="shell", title="Convergence (jaccard)")
-#    
-#    callbacks = [pl_holdout, ch_umass, convergence_jc]
 
     print("Finding coherence-scores for the list {}:".format(topics_to_optimize))
     for num_topics in topics_to_optimize:
@@ -301,8 +287,7 @@ def docs2bow(sample_size=2000):
     return bow
 
 def corpus2bow(lda_instance):
-    """
-    returns test corpus in bow format: list of (word_id,word_count)
+    """Returns test corpus in bow format: list of (word_id,word_count)
     """
     lda_instance.dictionary[1]
     bow_dict = copy.deepcopy(lda_instance.dictionary.id2token)
@@ -317,8 +302,7 @@ def corpus2bow(lda_instance):
     return bow_list
 
 def get_word_proba(bow,lda_instance):
-    """
-    returns probability matrix of same format as lda_model.get_topics() for test corpus,
+    """Returns probability matrix of same format as lda_model.get_topics() for test corpus,
     corrects for missing probabilities due to missing words in test corpus by adding zero padding.
     """
     test_topics, test_word_topics, test_word_proba = lda_instance.lda_model.get_document_topics(bow, 
@@ -388,7 +372,7 @@ def get_perplexity(lda_model, lda_instance, chunksize=2000):
     perplexity = np.exp2(-lda_model.log_perplexity(test_corpus,len(lda_instance.articles)))
     return perplexity
 
-def _get_scaled_significance(lda_model, n_words=200, sort=True):
+def _get_scaled_significance(lda_model, n_words=200):
     _cols = ['token_id', 'weight', 'topic']
     df = pd.DataFrame(data=None, columns=_cols)
     num_topics = lda_model.num_topics
@@ -399,16 +383,21 @@ def _get_scaled_significance(lda_model, n_words=200, sort=True):
         df = df.append(df_n)
         
     df = df.set_index(['token_id','topic'])
-    df = df.join(df.groupby(level=0).sum(),how='inner',rsuffix='_sum').groupby(level=[0,1]).first()
+    df = df.join(df.groupby(level=0).sum(), how='inner', rsuffix='_sum').groupby(level=[0,1]).first()
     df['scaled_weight'] = df['weight']/df['weight_sum']
-    if sort:
-        df.sort_values(['topic','scaled_weight'],inplace=True,ascending=False)
     return df['scaled_weight']
 
-def get_unique_words(lda_instance, topn=10, sort=True):
+def get_unique_words(lda_instance, topn=10):
+    """Builds df with topic words sorted by scaled uniqueness. 
+    args:
+        lda_instance (obj): Instance of LDA
+        topn (int): top words to consider when sorting
+    returns:
+        sorted DataFrame
+    """
     df_out = pd.DataFrame(data=None, columns=['scaled_weight','word'])
 
-    df = _get_scaled_significance(lda_instance.lda_model, topn, sort=sort)
+    df = _get_scaled_significance(lda_instance.lda_model, topn)
     for i in range(0,lda_instance.lda_model.num_topics,1):
         tokens = []
         df_topic = df[df.index.get_level_values('topic') == i]
@@ -476,12 +465,12 @@ def merge_documents_and_topics(lda_instance):
     df_enriched_lda.to_hdf(os.path.join(folder_path,topics_path), 'table', format='table', mode='w', append=False)
             
 def generate_wordclouds(lda_instance, topics=None, shade=True, title=None, num_words=15):
-    """
-    generates word cloud images. args:
-    topics: list of topics to cloud jointly, or int for single topics. 
+    """Generates word cloud images and saves to disk.
+    args:
+        topics: list of topics to cloud jointly, or int for single topics. 
             None (default) draws every topic in a separate image.
-    shade: Set greyshade of word by "uniqueness" ranking. Less unique words are lighter.
-    num_words: Number of words in cloud.
+        shade: Set greyshade of word by "uniqueness" ranking. Less unique words are lighter.
+        num_words: Number of words in cloud.
     """
     
     class MyColorFunctor():
@@ -583,59 +572,6 @@ def generate_wordclouds(lda_instance, topics=None, shade=True, title=None, num_w
         plt.gca().axis('off')
         plt.savefig(file_path, bbox_inches='tight', dpi=300)
         
-def dominating_sentence_per_topic(lda_instance, lda_model, corpus):
-    """
-    Construct a dataframe that, for each topic, contains
-        - The (un-processed) document that loads the most on it
-        - The document-weight
-        - The document (article)-id
-        - The fraction of documents that load the most on the topic
-    """
-
-    df_dom_sentences = pd.DataFrame()
-    subset_idx = random.sample(range(0, len(lda_model[corpus])), int(len(lda_model[corpus])))
-
-    for i, row in enumerate([lda_model[corpus][i] for i in subset_idx]):
-        # Pick the topic that the document loads the most on (the first element after sorting)
-        row = sorted(row, key=lambda x: (x[1]), reverse=True)
-        (topic_num, prop_topic) = row[0]
-
-        # Extract keywords of topic_num
-        topic_keywords = lda_model.show_topic(topic_num)
-        topic_keywords = ', '.join([word for word, prop in topic_keywords])
-
-        # Gather topic_num, loading, and keywords of topic_num for this document
-        df_dom_sentences = df_dom_sentences.append(pd.Series([int(topic_num),
-                                                              round(prop_topic, 3),
-                                                              topic_keywords]), ignore_index=True)
-
-    # Rename column and add article-id
-    df_dom_sentences.columns = ['dominating_topic', 'projection', 'topic_keywords']
-    df_dom_sentences['article_id'] = [lda_instance.article_id[i] for i in subset_idx]
-
-    # Group by topic and pick document with largest projection per group
-    df_dom_sentence_sort = pd.DataFrame()
-    for i, grp in df_dom_sentences.groupby('dominating_topic'):
-        df_grp = grp.sort_values('projection', ascending=False).head(1)
-        df_grp['fraction_documents'] = round(len(grp)/len(df_dom_sentences), 3)
-
-        df_dom_sentence_sort = df_dom_sentence_sort.append(df_grp)
-
-    df_dom_sentence_sort.reset_index(drop=True, inplace=True)
-
-    # Append un-processed data to df
-    files_list = get_files_list(params().paths['parsed_news'])
-    for f in files_list:
-        with open(os.path.join(params().paths['parsed_news'], f), 'rb') as f_in:
-            df_year = pickle.load(f_in)
-
-            df_dom_sentence_sort.set_index('article_id', inplace=True)
-            df_dom_sentence_sort['body'] = None
-            df_dom_sentence_sort.update(df_year.set_index('id')['body'])
-
-    return df_dom_sentence_sort
-
-
 def term_frequency(corpus_bow, dictionary, terms=30):
     corpus_iter = iter(corpus_bow)
     counter = Counter()
@@ -649,99 +585,6 @@ def term_frequency(corpus_bow, dictionary, terms=30):
             break
     return counter.most_common(terms), counter.most_common()[:-terms-1:-1]
 
-
-def visualize_lda(lda_instance, lambda_step=0.05):
-    from pyLDAvis import gensim
-    print("Creating vis_data")
-    vis_data = gensim.prepare(lda_instance.lda_model,
-                              lda_instance.SerializedCorpus,
-                              lda_instance.dictionary,
-                              sort_topics=False, lambda_step=lambda_step)
-    pyLDAvis.save_html(vis_data, os.path.join(params().paths['lda'], 'pyLDAvis.html'))
-
-
-def plot_descending_topic_size(lda_instance, thresholds):
-    # flattened_documents = [word for document in lda_instance.articles for word in document.split()]
-    # counter = Counter(flattened_documents)
-    topics = lda_instance.lda_model.show_topics(formatted=False, num_topics=-1, num_words=100)
-
-    df_keywords = []
-    for topic_number, topic in topics:
-        for keyword, weight in topic:
-            # df_keywords.append([topic_number, keyword, weight, counter[keyword]])
-            df_keywords.append([topic_number, keyword, weight])
-
-    for threshold in thresholds:
-        # df_threshold = pd.DataFrame(df_keywords, columns=['topic', 'keyword', 'keyword_weight', 'word_count'])
-        df_threshold = pd.DataFrame(df_keywords, columns=['topic', 'keyword', 'keyword_weight'])
-        df_threshold = pd.DataFrame([(i, len(df_threshold[(df_threshold['topic'] == i) &
-                                                          (df_threshold['keyword_weight'] > threshold)]))
-                                     for i in range(0, len(topics))],
-                                    columns=['topic_number', 'number_keywords'])
-
-        df_threshold.sort_values('number_keywords', ascending=False, inplace=True)
-
-        plt.plot([i for i in range(len(df_threshold))], df_threshold['number_keywords'], label=threshold)
-        plt.legend(loc='upper left')
-        plt.xlabel('Cluster number')
-        plt.ylabel('Number of keywords')
-        plt.show()
-
-
-def weight_of_top_words(lda_instance, top_n_words=10):
-
-    top_weights = []
-    topics = lda_instance.lda_model.show_topics(formatted=False, num_topics=-1, num_words=top_n_words)
-    for _, topic in topics:
-        weight = sum([weight for _, weight in topic])
-        top_weights.append(weight)
-
-    indices = np.arange(len(topics))
-    width = 0.5
-
-    fig, ax = plt.subplots()
-    ax.bar(indices - width/2, top_weights, width, color = 'lightcoral')
-    ax.set_xticks(indices)
-
-    plt.xlabel('Topic')
-    plt.ylabel('Sum of {} largest weights'.format(top_n_words))
-    plt.title('Total probability of top {} words in each topic'.format(top_n_words))
-    plt.xlim(-0.5, top_n_words-0.5)
-    plt.ylim(0, 0.75)
-    plt.xticks(indices[::2])
-    plt.show()
-
-
-def plt_weight_words(lda_instance, top_n_words=20):
-
-    def split_array_in_chunks(l, n):
-        return [l[i:i + n] for i in range(0, len(l), n)]
-
-    array_topic_numbers = split_array_in_chunks(range(lda_instance.lda_model.num_topics), 8)
-    topics = lda_instance.lda_model.show_topics(num_topics=-1, num_words=top_n_words, formatted=False)
-
-    for i, topic_numbers in enumerate(array_topic_numbers):
-
-        plt.figure()
-        for j, word_weight in [topics[k] for k in topic_numbers]:
-            weights = [weight for _, weight in word_weight]
-            plt.plot(range(top_n_words), weights, label=j)
-            plt.legend()
-
-        plt.xlabel('Word rank')
-        plt.ylabel('Weight')
-        plt.title('Weights of top {} words in each topic'.format(top_n_words))
-        plt.xticks(range(top_n_words+1)[::2])
-        plt.xlim(-1, top_n_words)
-
-        folder_path = os.path.join(params().paths['lda'], 'topic_sizes_' +
-                                   str(lda_instance.lda_model.num_topics))
-        file_path = os.path.join(folder_path, '{}.png'.format(i))
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
-        plt.savefig(file_path, bbox_inches='tight')
-        plt.close()
-        
 def _return_array(array, n_topics=80):
     """
     Utility function transforming the projections as returned by the LDA
@@ -750,12 +593,6 @@ def _return_array(array, n_topics=80):
     output = np.array(
         [[sum([el[1] for el in row if el[0] == topic]) for topic in range(1, n_topics + 1)] for row in array])
     return output
-
-
-def _smooth(y, smoothing_points):
-    box = np.ones(smoothing_points) / smoothing_points
-    y_smooth = np.convolve(y, box, mode='valid')
-    return y_smooth
 
 def parse_topic_labels(name,num_topics):
     """

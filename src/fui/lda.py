@@ -4,26 +4,13 @@ import gensim
 import h5py
 import numpy as np
 import os
-import re
-import pandas as pd
-import pickle
 import random
 import warnings
-import json
-import lemmy
 
 from fui.ldatools import preprocess
-from fui.utils import timestamp, params, read_h5py
-
-from collections import Counter
-from datetime import timedelta, datetime
+from fui.utils import params, read_h5py
 from functools import partial
-from matplotlib import pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap
 from multiprocessing import Pool
-from wordcloud import WordCloud
-from nltk.stem.snowball import SnowballStemmer
-
 
 class LDA:
     def __init__(self, lemmatizer, test_share=0.05, test=False):
@@ -39,7 +26,7 @@ class LDA:
             import logging
             try:
                 os.remove(params().paths['lda']+'lda_log.txt')
-            except (FileNotFoundError, PermissionError) as e:
+            except (FileNotFoundError, PermissionError):
                 pass
             logging.basicConfig(filename=params().paths['lda']+'lda_log.txt',
                                 format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)

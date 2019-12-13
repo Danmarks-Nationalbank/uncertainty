@@ -3,7 +3,6 @@ from itertools import cycle, islice
 import gensim
 import numpy as np
 import pandas as pd
-import pickle
 import codecs
 import json
 from matplotlib import pyplot as plt
@@ -14,16 +13,19 @@ from fui.utils import params
 from scipy.spatial.distance import pdist
 
 class ClusterTree():
-    """
-    Build clusters from topic models using scipy.cluster.hierarchy.
-    :num_topics: Used to load a pre-trained topic model.
-    :metric: and :method: Used for HAC.
+    """Build clusters from topic models using scipy.cluster.hierarchy.
     """
     
     def __init__(self, num_topics, metric='jensenshannon', method='ward', 
                  unique_scale=True, topn=None):
         """
-        Saves linkage matrix :Z: and :nodelist:
+        Saves linkage matrix `Z´ and `nodelist´
+        args:
+            num_topics (int): Selects LDA model.
+            metric (str): Metric passed to scipy.spatial.distance.pdist 
+            method (str): Method passed to scipy.cluster.hierarchy
+            unique_scale (bool): Scale word proba by uniqueness
+            topn (int, optional): only consider X words (don't use)
         """
         
         self.num_topics = num_topics
@@ -61,7 +63,7 @@ class ClusterTree():
     
     def _get_children(self, id):
         """
-        Recursively get all children of parent node :id:
+        Recursively get all children of parent node `id´
         """
         if not self.nodelist[id].is_leaf():
             for child in [self.nodelist[id].get_left(), self.nodelist[id].get_right()]:
@@ -70,8 +72,7 @@ class ClusterTree():
                     yield grandchild
                     
     def children(self):
-        """
-        Returns a dict with k, v: parent: [children]. Does not include leaf nodes.
+        """Returns a dict with k, v: parent: [children]. Does not include leaf nodes.
         """
         self.children = {}
         for i in range(self.num_topics,len(self.nodelist)):
@@ -79,8 +80,7 @@ class ClusterTree():
         return self.children
     
     def _get_topic_sums(self):
-        """
-        Get sum of topic probabilities across articles.
+        """Get sum of topic probabilities across articles.
         """        
         df = pd.read_hdf(params().paths['doc_topics']+'doc_topics_u_count_extend.h5', 'table')
         df = df.iloc[:,0:self.num_topics].values.tolist()
@@ -102,9 +102,7 @@ class ClusterTree():
         self.node_weights = self.node_weights/np.max(self.node_weights)
                     
     def _colorpicker(self,k):
-        """
-        Returns an NB color to visually group similar topics in dendrogram
-        
+        """Returns an NB color to visually group similar topics in dendrogram
         """
         NB_colors = [(0, 123, 209),
                      (146, 34, 156),
