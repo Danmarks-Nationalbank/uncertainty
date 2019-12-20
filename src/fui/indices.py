@@ -286,7 +286,8 @@ class LDAIndexer(BaseIndexer):
                 topics = self.label_dict[topics[0]]
             self.topics = topics
             df['idx'] = df['topics'].apply(
-                    lambda x : np.array([j for i,j in enumerate(x) if (i in topics) and (j >= topic_thold)]).sum())
+                    lambda x : np.array([j for i,j in enumerate(x) if (i in topics)]).sum())
+            df.loc[df.idx < topic_thold, 'idx'] = 0
             if u_weight:
                 df['idx'] = df['idx']*(df['u_count']/df['word_count'])
             self.idx = self.aggregate(df)
