@@ -12,14 +12,14 @@ from fui.indices import extend_dict_w2v, uncertainty_count
 if __name__ == '__main__':
     
     #df = parse_raw_data()
-    U_set = set(list(extend_dict_w2v("uncertainty", n_words=20).values())[0])
+    #U_set = set(list(extend_dict_w2v("uncertainty", n_words=20).values())[0])
     #print(params().paths['enriched_news'])
     #uncertainty_count()
     #uncertainty_count(extend=False)
     
-#    international = LDAIndexer(name='ep_int')
-#    international.build(num_topics=80,sample_size=0,topics=['EP_int'],topic_thold=0.0,frq='M')
-#    international.plot_index(title='Economic policy uncertainty, international', plot_vix=False, plot_hh=True)
+    international = LDAIndexer(name='ep_int')
+    international.build(num_topics=80,sample_size=0,topics=['EP_int'],topic_thold=0.0,frq='M')
+    international.plot_index(title='Economic policy uncertainty, international', plot_vix=False, plot_hh=True)
 #    
 #    international = LDAIndexer(name='ep_int')
 #    international.build(num_topics=80,sample_size=0,topics=['EP_int'],topic_thold=0.0,frq='Q')

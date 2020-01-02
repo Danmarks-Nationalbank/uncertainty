@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.dates as mdates
 
+from scipy.signal import detrend
 from gensim.models import KeyedVectors
 from cycler import cycler
 from datetime import datetime
@@ -90,7 +91,7 @@ class BaseIndexer():
         return self.labels
           
 
-    def aggregate(self, df, col='idx', norm=True, write_csv=True, method='mean'):
+    def aggregate(self, df, col='idx', norm=True, remove_trend=True, write_csv=True, method='mean'):
         """
         Aggregates to means within 
         each aggregation frequency
@@ -111,12 +112,14 @@ class BaseIndexer():
                 
         idx.index = idx.index.rename('date')
         idx = idx[str(self.start_year):str(self.end_year)+self.end_str]   
+        if remove_trend:
+            idx[col] = detrend(idx[col])
 
         if norm:
             #normalize to mean = 0, std = 1
             #idx.columns = idx.columns.get_level_values(0)
-            idx[(col+'_norm')] = _normalize(idx[col])
-        
+            idx[(col+'_norm')] = _normalize()
+   
         #drop last month, incomplete
         #idx.drop(pd.to_datetime('2019-05-31'), inplace=True)
         #dump_csv(folder_path,var+'_score_'+f+'.csv',idx)
