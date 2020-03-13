@@ -18,7 +18,7 @@
 # which is a requirement. To fix it, in the environment copy the dll libs in 
 # Lib/site-packages/pywin32_system32 into Lib/site-packages/win32.
 
-numpy           == 1.17.1
+numpy           == 1.17.2
 pandas          == 0.25.1
 nltk            == 3.4.5
 matplotlib      == 3.0.3
@@ -26,3 +26,10 @@ matplotlib      == 3.0.3
 # ipykernel       == 5.1.2
 pylint          == 2.4.0
 # jupyterlab      == 1.1.1
+gensim		== 3.8.1
+h5py 		== 2.10.0
+lemmy
+scipy 		== 1.3.1
+langdetect
+tables 		== 3.5.1
+wordcloud 	== 1.6.0
