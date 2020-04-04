@@ -17,7 +17,7 @@ from multiprocessing import Pool
 from wordcloud import WordCloud
 from langdetect import detect
 
-from fui.utils import timestamp, params, read_h5py
+from src.fui.utils import timestamp, params, read_h5py
 
 
 def __remove_stopwords(word_list, stopfile):

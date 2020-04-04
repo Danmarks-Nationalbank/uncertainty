@@ -1,6 +1,7 @@
 ﻿{
 	"paths": {
 		"root" : "C:\\projects\\FUI\\",
+		"scraped":  "data\\borsen\\scraped\\",
         "enriched_news": "data\\intermediate\\enriched_news\\",
         "firm_events": "data\\intermediate\\firm_events\\",
 		"lda": "data\\intermediate\\lda\\",
@@ -10,10 +11,15 @@
 		"input": "data\\input\\",
         "parsed_news": "data\\intermediate\\parsed_news\\",
 		"w2v_model": "data\\wiki.da.vec",
-		"indices": "data\\indices\\"
+		"indices": "data\\indices\\",
+		"credentials": "credentials\\"
 	},
 	"filenames": {
+		"headlines": "boersen_headlines.csv",
+		"boersen_merged": "boersen_all_articles.csv",
 		"boersen_csv": "Nat_bank_articles.csv",
+		"boersen_csv2": "Nat_bank_articles2.csv",
+		"boersen_csv3": "Nat_bank_articles3.csv",
 		"bloom_scores": "bloom_scores",
 		"lda_cleaned_text": "parsed_strings.hdf5",
 		"lda_dictionary": "dictionary.pkl",

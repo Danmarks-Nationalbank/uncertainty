@@ -7,8 +7,8 @@ import os
 import random
 import warnings
 
-from fui.ldatools import preprocess
-from fui.utils import params, read_h5py
+from src.fui.ldatools import preprocess
+from src.fui.utils import params, read_h5py
 from functools import partial
 from multiprocessing import Pool
 
@@ -45,7 +45,7 @@ class LDA:
                                     params().filenames['parsed_news']))
 
         try:
-            self.articles.extend(list(df['ArticleContents'].values))
+            self.articles.extend(list(df['body'].values))
             self.article_id.extend(list(df['article_id'].values))
         except KeyError:
             print("File doesn't contain any body-text")

@@ -8,8 +8,8 @@ import json
 from matplotlib import pyplot as plt
 from matplotlib.collections import LineCollection
 import scipy.cluster.hierarchy as hierarchy
-import fui.hierarchymod as hierarchymod
-from fui.utils import params
+import src.fui.hierarchymod as hierarchymod
+from src.fui.utils import params
 from scipy.spatial.distance import pdist
 
 class ClusterTree():

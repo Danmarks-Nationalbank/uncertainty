@@ -53,6 +53,7 @@ env_whl/*
 # Data folder
 data/*
 office/*
+credentials/*
 
 # Scripts we don't want to track
 scripts/scraps/*

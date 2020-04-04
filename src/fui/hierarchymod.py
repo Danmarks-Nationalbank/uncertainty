@@ -104,7 +104,7 @@ import bisect
 from collections import deque
 
 import numpy as np
-from . import _hierarchy, _optimal_leaf_ordering
+from scipy.cluster import _hierarchy, _optimal_leaf_ordering
 import scipy.spatial.distance as distance
 
 from scipy._lib.six import string_types
