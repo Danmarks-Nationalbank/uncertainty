@@ -52,8 +52,6 @@ def parse_for_lda(nrows=None):
     df['article_id'] = df.reset_index().index
     print('Columns: ', df.columns)
     
-    df.describe()
-    
     with h5py.File(os.path.join(params().paths['parsed_news'],params().filenames['parsed_news']), 'w') as hf:
         string_dt = h5py.string_dtype(encoding='utf-8')
         hf.create_dataset('parsed_strings', data=df, dtype=string_dt)

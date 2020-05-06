@@ -53,14 +53,23 @@ def read_h5py(file_path, obj='parsed_strings'):
                            2: 'byline_alt',
                            3: 'category',
                            4: 'date',
-                           5: 'word_count'}, inplace=True)
+                           5: 'headline',
+                           6: 'id',
+                           7: 'section_name',
+                           8: 'body_len',
+                           9: 'year',
+                           10: 'word_count',
+                           11: 'article_id'}, inplace=True)
         df['date'] = pd.to_datetime(df['date'])
         df['article_id'] = df['article_id'].astype('int')
-        df['word_count'] = df['word_count'].astype('int')
-        if len(df.columns) > 6:
-            df.rename(columns={6:'u_count'}, inplace=True)
+        df['word_count'] = df['word_count'].astype('float')
+        df['body_len'] = df['body_len'].astype('float')
+        df['year'] = df['year'].astype('int')
+        df['id'] = df['id'].astype('float')
+        if len(df.columns) > 12:
+            df.rename(columns={12: 'u_count'}, inplace=True)
             df['u_count'] = df['u_count'].astype('int')
-            df.rename(columns={7:'n_count'}, inplace=True)
+            df.rename(columns={13:'n_count'}, inplace=True)
             df['n_count'] = df['n_count'].astype('int')
         return df
     except FileNotFoundError:

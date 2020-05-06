@@ -22,17 +22,16 @@ class LDA:
         self.lemmatizer = lemmatizer
         self.test_share = test_share
                 
-        if params().options['lda']['log']:
-            import logging
-            try:
-                os.remove(params().paths['lda']+'lda_log.txt')
-            except (FileNotFoundError, PermissionError):
-                pass
-            logging.basicConfig(filename=params().paths['lda']+'lda_log.txt',
-                                format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
-            logger = logging.getLogger(__name__)
-            logger.setLevel(logging.DEBUG)
-            warnings.filterwarnings('ignore', category=DeprecationWarning)
+        #if params().options['lda']['log']:
+        import logging
+        try:
+            os.remove(params().paths['lda']+'lda_log.txt')
+        except (FileNotFoundError, PermissionError):
+            pass
+        logging.basicConfig(filename=params().paths['lda']+'lda_log.txt',
+                            format='%(asctime)s : %(levelname)s : %(message)s', level=logging.DEBUG)
+        logger = logging.getLogger(__name__)
+        warnings.filterwarnings('ignore', category=DeprecationWarning)
 
     def __iter__(self):
         for line in self.articles:

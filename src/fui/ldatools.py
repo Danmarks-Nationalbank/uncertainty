@@ -28,7 +28,7 @@ def __remove_stopwords(word_list, stopfile):
     word_list = [word for word in word_list if word not in stopwords]
     return word_list   
 
-def preprocess(text, lemmatizer, stopfile='data/stopwords.txt'):
+def preprocess(text, lemmatizer, stopfile='../data/stopwords.txt'):
     """
     - simple_preprocess (convert all words to lowercase, remove punctuations, floats, newlines (\n),
     tabs (\t) and split to words)
@@ -84,7 +84,7 @@ def print_topics(lda_instance, topn=30, unique_sort=True):
         return word_lists
         
     else: 
-        df = get_unique_words(lda_model, lda_instance, topn)
+        df = get_unique_words(lda_instance, topn)
 
         df = df[['word']]
         df.index = pd.MultiIndex.from_arrays(
@@ -107,25 +107,36 @@ def optimize_topics(lda_instance, topics_to_optimize, plot=False, plot_title="")
                                                  id2word=lda_instance.dictionary,
                                                  passes=20, per_word_topics=False,
                                                  alpha='asymmetric',
-                                                 eval_every=10,
+                                                 eval_every=100,
                                                  minimum_probability=0.0,
-                                                 chunksize=10000, workers=15)
+                                                 chunksize=10000, workers=16)
 
         coherence_model_n = gensim.models.CoherenceModel(model=lda_model_n,
                                                          texts=(articles for articles in lda_instance),
                                                          dictionary=lda_instance.dictionary,
                                                          coherence='c_v',
-                                                         processes=15)
+                                                         processes=16)
         lda_models.append(lda_model_n)
         coherence_scores.append(coherence_model_n.get_coherence())
+
+        try:
+            folder_path = os.path.join(params().paths['lda'], 'lda_model_' + str(num_topics))
+            file_path = os.path.join(folder_path, 'trained_lda')
+            if not os.path.exists(folder_path):
+                os.makedirs(folder_path)
+            lda_model_n.save(file_path)
+            print("LDA-model saved ({} topics)".format(num_topics))
+        except FileNotFoundError:
+            print("Error: LDA-file not found")
+
+        with open('coherence.csv', 'a+', newline='') as csvout:
+            wr = csv.writer(csvout, delimiter=',', lineterminator='\n')
+            wr.writerow([num_topics, coherence_model_n.get_coherence()])
 
     for n, cv in zip(topics_to_optimize, coherence_scores):
         print("LDA with {} topics has a coherence-score {}".format(n, round(cv, 2)))
         
-    with open('coherence.csv', 'w', newline='') as csvout:
-        wr = csv.writer(csvout, delimiter=',')
-        for cv, n in zip(coherence_scores, topics_to_optimize):
-            wr.writerow([n,cv])
+
 
     if plot:
         plt.plot(topics_to_optimize, coherence_scores)
@@ -444,7 +455,7 @@ def merge_documents_and_topics(lda_instance):
                            'topics': [[x[1] for x in document_topics[i]] for i in range(len(document_topics))]})
 
     # Merge the enriched data onto LDA-projections
-    df_enriched_lda = pd.merge(df_lda, articles[['article_id', 'Title', 'ArticleDateCreated']],
+    df_enriched_lda = pd.merge(df_lda, articles[['article_id', 'headline', 'date']],
                                how='inner',
                                on='article_id')
 
@@ -460,7 +471,7 @@ def merge_documents_and_topics(lda_instance):
         os.makedirs(folder_path)
         
     df2 = pd.DataFrame(df_enriched_lda.topics.values.tolist(), index = df_enriched_lda.index)
-    df_enriched_lda = pd.concat([df2, df_enriched_lda[['article_id', 'Title', 'ArticleDateCreated']]], axis=1)
+    df_enriched_lda = pd.concat([df2, df_enriched_lda[['article_id', 'headline', 'date']]], axis=1)
     del(df2)
     df_enriched_lda.to_hdf(os.path.join(folder_path,topics_path), 'table', format='table', mode='w', append=False)
             

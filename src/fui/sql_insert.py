@@ -111,7 +111,8 @@ def import_csv():
     dtypes = {'id': 'bigint', 'headline': 'NVARCHAR(500)',
               'body': 'ntext', 'date': 'datetime2',
               'byline': 'NVARCHAR(500)', 'section_name': 'NVARCHAR(500)',
-              'category': 'NVARCHAR(500)', 'byline_alt': 'NVARCHAR(500)'}
+              'category': 'NVARCHAR(500)', 'byline_alt': 'NVARCHAR(500)',
+              'body_len': 'int'}
 
     return df1, dtypes
 

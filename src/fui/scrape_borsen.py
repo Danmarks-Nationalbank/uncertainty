@@ -1,14 +1,17 @@
 from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support import expected_conditions as ec
+from selenium.common.exceptions import TimeoutException
 from lxml import html, etree
 import time
 import csv
-import requests
+from datetime import datetime
 from pathlib import Path
 import pandas as pd
-from selenium.common.exceptions import TimeoutException
-
 from src.fui.utils import params
-from googlesearch import search
 import re
 from googleapiclient.discovery import build
 
@@ -36,8 +39,8 @@ def infomedia_login(driver):
     password.send_keys(infomedia['password'])
     driver.find_element_by_id("loginBtn").click()
 
-def get_infomedia_headlines(driver=None):
-    p = Path(params().paths['scraped'] + params().filenames['headlines'])
+def get_infomedia_headlines(fromdate, todate, driver=None):
+    p = Path(params().paths['scraped']+params().filenames['headlines']+'_'+fromdate.strftime("%d-%m-%y")+'_'+todate.strftime("%d-%m-%y"))
     if p.exists():
         df = pd.read_csv(str(p), encoding="latin-1", sep=";", header=None)
         headlines = df[0].to_list()
@@ -51,8 +54,21 @@ def get_infomedia_headlines(driver=None):
         driver.get(url)
         infomedia_login(driver)
 
+        WebDriverWait(driver, 20).until(
+            ec.visibility_of_element_located((By.XPATH, '//*[@id="__filterSpecDropDown_DateRange"]')))
         driver.find_element_by_xpath('//*[@class="ace_text-input"]').send_keys('e*')
-        time.sleep(5)
+        driver.find_element_by_xpath('//*[@id="__filterSpecDropDown_DateRange"]').click()
+        time.sleep(3)
+        driver.find_element_by_xpath('//input[@data-bind="value: FormattedFromDate"]').click()
+        driver.find_element_by_xpath('//input[@data-bind="value: FormattedFromDate"]').send_keys(Keys.CONTROL + "a")
+        driver.find_element_by_xpath('//input[@data-bind="value: FormattedFromDate"]').send_keys(
+            f'{fromdate.month}/{fromdate.day}/{fromdate.year}')
+        time.sleep(3)
+        driver.find_element_by_xpath('//input[@data-bind="value: FormattedToDate"]').click()
+        driver.find_element_by_xpath('//input[@data-bind="value: FormattedToDate"]').send_keys(Keys.CONTROL + "a")
+        driver.find_element_by_xpath('//input[@data-bind="value: FormattedToDate"]').send_keys(
+            f'{todate.month}/{todate.day}/{todate.year}')
+        time.sleep(3)
         driver.find_element_by_id("iqlsearchbtn").click()
         time.sleep(20)
 
@@ -89,7 +105,9 @@ def get_infomedia_headlines(driver=None):
             l = l.replace(u'\u00ad', '')
             l = l.replace(u'\N{SOFT HYPHEN}', '')
             print(l)
-        with open(params().paths['scraped']+params().filenames['headlines'], 'w', newline='') as headlines:
+        formstre = datetime.now().strftime("%d-%m-%y")
+        with open(params().paths['scraped']+params().filenames['headlines']+'_'+fromdate.strftime("%d-%m-%y")+'_'+todate.strftime("%d-%m-%y"),
+                  'w', newline='') as headlines:
             wr = csv.writer(headlines, delimiter=';')
             wr.writerows(zip(headers, metas))
 

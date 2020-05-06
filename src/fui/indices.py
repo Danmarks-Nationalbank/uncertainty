@@ -17,7 +17,7 @@ from nltk.stem.snowball import SnowballStemmer
 from multiprocessing import Pool
 from functools import partial
 from matplotlib import pyplot as plt
-from fui.utils import params, read_h5py, dump_csv
+from src.fui.utils import params, read_h5py, dump_csv
 
 years = mdates.YearLocator()   # every year
 months = mdates.MonthLocator((1, 4, 7, 10))
@@ -75,7 +75,7 @@ class BaseIndexer():
                    
         return v1x, vix
     
-    def parse_topic_labels(self,name):
+    def parse_topic_labels(self, name):
         """
         reads hand labeled topics from json file.
         args:
@@ -88,10 +88,11 @@ class BaseIndexer():
           
         with codecs.open(label_path, 'r', encoding='utf-8-sig') as f:
             self.labels = json.load(f)
+        self.labels['EP'] = list(set().union(self.labels['EP_int'], self.labels['EP_dk']))
         return self.labels
           
 
-    def aggregate(self, df, col='idx', norm=True, remove_trend=True, write_csv=True, method='mean'):
+    def aggregate(self, df, col='idx', norm=True, write_csv=True, method='mean'):
         """
         Aggregates to means within 
         each aggregation frequency
@@ -105,31 +106,24 @@ class BaseIndexer():
         DataFrame of aggregation result with datetime index.
         """     
         
-        df.set_index('ArticleDateCreated', inplace=True, drop=False)
-        idx = df[[col, 'ArticleDateCreated']].groupby(
-            [pd.Grouper(key='ArticleDateCreated', freq=self.frq)]
+        df.set_index('date', inplace=True, drop=False)
+        idx = df[[col, 'date']].groupby(
+            [pd.Grouper(key='date', freq=self.frq)]
         ).agg([method])
-                
-        idx.index = idx.index.rename('date')
-        idx = idx[str(self.start_year):str(self.end_year)+self.end_str]   
-        if remove_trend:
-            idx[col] = detrend(idx[col])
 
         if norm:
             #normalize to mean = 0, std = 1
-            #idx.columns = idx.columns.get_level_values(0)
-            idx[(col+'_norm')] = _normalize()
-   
-        #drop last month, incomplete
-        #idx.drop(pd.to_datetime('2019-05-31'), inplace=True)
-        #dump_csv(folder_path,var+'_score_'+f+'.csv',idx)
+            idx[(col+'_norm')] = _normalize(idx[col])
+
+        idx = idx[str(self.start_year):str(self.end_year)+self.end_str]
+
         print("Last month: ", idx[-1:])
         idx.to_pickle(params().paths['indices']+self.name+'_'+self.frq+'.pkl')
         if write_csv:
             dump_csv(params().paths['indices'], self.name+'_'+self.frq, idx, verbose=False)
         return idx
 
-    def plot_index(self, plot_vix=True, plot_hh=False, annotate=True, title=None):
+    def plot_index(self, plot_vix=False, annotate=True, title=None):
         """
         Plot index from df column named "idx_norm".
         Args:
@@ -153,22 +147,16 @@ class BaseIndexer():
                 (102/255, 102/255, 102/255)
             ])
         plt.rcParams["axes.prop_cycle"] = c
-        
-        v1x, vix = self.load_vix(self.frq)
-                
+
         fig, ax = plt.subplots(figsize=(14,6))
         ax.plot(self.idx.index, self.idx[idx_col], label='Børsen Uncertainty Index')
         if title:
             ax.title.set_text(title)
         if plot_vix:
+            v1x, vix = self.load_vix(self.frq)
             ax.plot(v1x.index, v1x.v1x, label='VDAX-NEW')
             ax.plot(vix.index, vix.vix, label='VIX')
-        if plot_hh:
-            with open(params().paths['input']+'hh_transactions.pkl', 'rb') as f:
-                df_hh = pickle.load(f)
-            df_hh = df_hh[str(self.start_year):str(self.end_year)+self.end_str]   
-            ax.plot(df_hh.index, df_hh.net_norm, label='HH NET')
-            
+
         ax.legend(frameon=False, loc='upper left')    
     
         ax.xaxis.set_major_locator(years)
@@ -184,9 +172,13 @@ class BaseIndexer():
                        color=(102/255, 102/255, 102/255), alpha=0.3)
             ax.annotate("Debt crisis", xy=(datetime(2012,2,15), 0.97),  
                         xycoords=('data', 'axes fraction'), fontsize='x-small', ha='center')
-            ax.axvspan(xmin=datetime(2018,3,1), xmax=datetime(2019,5,31), 
+            ax.axvspan(xmin=datetime(2018,3,1), xmax=datetime(2019,12,1),
                        color=(102/255, 102/255, 102/255), alpha=0.3)
-            ax.annotate("Trade war", xy=(datetime(2018,11,15), 0.97), 
+            ax.annotate("Trade war", xy=(datetime(2019,2,15), 0.97),
+                        xycoords=('data', 'axes fraction'), fontsize='x-small', ha='center')
+            ax.axvspan(xmin=datetime(2020,2,1), xmax=datetime(2020,5,1),
+                       color=(102/255, 102/255, 102/255), alpha=0.3)
+            ax.annotate("Corona crisis", xy=(datetime(2020,3,15), 0.8),
                         xycoords=('data', 'axes fraction'), fontsize='x-small', ha='center')
     
             dates_dict = {'Euro \nreferendum': '2000-09-28',
@@ -201,16 +193,16 @@ class BaseIndexer():
                           '2011 Election': '2011-09-15',
                           '"Whatever\n it takes"': '2012-07-26', 
                           '2013 US Gov\n shutdown': '2013-10-15', 
-                          'DKK pressure\n crisis': '2015-02-15',
+                          #'DKK pressure\n crisis': '2015-02-15',
                           '2015\n Election': '2015-06-18',
                           'Migrant\n crisis': '2015-09-15',
                           'Brexit': '2016-06-23',
                           'US\n Election': '2016-11-08',
-                          'Labor parties\n agreement': '2018-04-15',
+                          #'Labor parties\n agreement': '2018-04-15',
                           'Danke Bank\n money laundering': '2018-09-15',
                           '2018 US Gov\n shutdown': '2018-12-10'}
             
-            heights = [0.15,0.7, 0.8, 0.9, 0.8, 0.9, 0.8, 
+            heights = [0.15, 0.7, 0.8, 0.9, 0.8, 0.9, 0.8,
                        0.97, 0.9, 0.8, 0.7, 0.9, 0.7, 0.95, 0.8,
                        0.97, 0.9, 0.7, 0.9, 0.8]
     
@@ -221,15 +213,14 @@ class BaseIndexer():
                             fontsize='x-small', ha='center')
             #corr = _calc_corr(vix,idx[idx_name])
             #ax.text(0.80, 0.95, 'Correlation with VIX: %.2f' % round(corr,2) , transform=ax.transAxes)
-        
-        plt.show()
-        fig.savefig(f'{out_path}{self.name}_{self.frq}_plot.png', dpi=300)
+
+        plt.savefig(f'{out_path}{self.name}_{self.frq}_plot.png', dpi=300)
         return fig, ax
     
 class LDAIndexer(BaseIndexer):
     """Class for constructing LDA indices."""    
     
-    def build(self, df=None, labels='meta_topics', num_topics=80, start_year=2000, end_year=2019, 
+    def build(self, df=None, labels='meta_topics', num_topics=80, start_year=2000, end_year=2020,
               frq='M', topics=None, xsection=None, topic_thold=0.0, 
               xsection_thold=0.1, main_topic=False, extend_u_dict=True, u_weight=True):
         """Calculates indicies.
@@ -261,8 +252,8 @@ class LDAIndexer(BaseIndexer):
         self.num_topics = num_topics
         if labels:
             self.label_dict = self.parse_topic_labels(labels)
-        if end_year == 2019:
-            self.end_str = '-04-30'
+        if end_year == 2020:
+            self.end_str = '-03-31'
         else:
             self.end_str = ''
 
@@ -271,7 +262,7 @@ class LDAIndexer(BaseIndexer):
         
 
         if df is None: 
-            df = merge_lda_u(extend_u_dict)
+            df = merge_lda_u(extend_u_dict, num_topics=self.num_topics)
         
         if main_topic:
             df['idx'] = df['topics'].apply(
@@ -288,6 +279,7 @@ class LDAIndexer(BaseIndexer):
             if isinstance(topics[0], str):
                 topics = self.label_dict[topics[0]]
             self.topics = topics
+            print(topics)
             df['idx'] = df['topics'].apply(
                     lambda x : np.array([j for i,j in enumerate(x) if (i in topics)]).sum())
             df.loc[df.idx < topic_thold, 'idx'] = 0
@@ -320,7 +312,7 @@ class LDAIndexer(BaseIndexer):
 
 class BloomIndexer(BaseIndexer):
     def build(self, logic, bloom_dict_name,
-              start_year=2000, end_year=2019, frq='M', u_weight=False, extend=True):
+              start_year=2000, end_year=2020, frq='M', u_weight=False, extend=True):
         """
         Finds for articles containing words in bloom dictionary. Saves result to disk.
         args:
@@ -331,8 +323,8 @@ class BloomIndexer(BaseIndexer):
         self.end_year = end_year
         self.logic = logic
         self.frq = frq
-        if self.end_year == 2019:
-            self.end_str = '-04-30'
+        if self.end_year == 2020:
+            self.end_str = '-03-31'
         else:
             self.end_str = ''
         
@@ -357,7 +349,7 @@ class BloomIndexer(BaseIndexer):
         #stem articles
         with Pool() as pool:
             df['body_stemmed'] = pool.map(_stemtext, 
-                                          df['ArticleContents'].values.tolist())
+                                          df['body'].values.tolist())
         if u_weight:
             logic_str = params().options['bloom_logic_weighted']
         else:
@@ -440,13 +432,13 @@ def _load_u_count(sample_size=0,extend=True):
 
     file_path = os.path.join(params().paths['enriched_news'],filename)
     df = read_h5py(file_path)
-    df = df[['article_id','ArticleContents','u_count','n_count','word_count']]
+    df = df[['article_id', 'body', 'u_count', 'n_count', 'word_count']]
     if sample_size > 0:
         return df.sample(sample_size)
     else:
         return df
 
-def merge_lda_u(extend=True,sample_size=0,num_topics=80):
+def merge_lda_u(extend=True,sample_size=0,num_topics=90):
     """Merges uncertainty counts and topic vectors.
     args:
         extend (bool): Use extended set of u-words.
@@ -461,7 +453,7 @@ def merge_lda_u(extend=True,sample_size=0,num_topics=80):
         suffix='u_count'
     try:
         df = pd.read_hdf(params().paths['doc_topics']+'doc_topics_'+suffix+'.h5', 'table')
-        df['ArticleDateCreated'] = pd.to_datetime(df['ArticleDateCreated'])
+        df['date'] = pd.to_datetime(df['date'])
         
         #convert columns to single col list
         df['topics']= df.iloc[:,0:num_topics].values.tolist()
@@ -472,12 +464,12 @@ def merge_lda_u(extend=True,sample_size=0,num_topics=80):
     
     except FileNotFoundError:
         print('File not found, merging lda topics and uncertainty counts...')
-        df_u = _load_u_count(extend=extend,sample_size=sample_size)
+        df_u = _load_u_count(extend=extend, sample_size=sample_size)
         df = pd.read_hdf(params().paths['doc_topics']+'document_topics.h5', 'table')
         df['topics']= df.iloc[:,0:num_topics].values.tolist()
         df.drop(df.columns[0:num_topics], axis=1, inplace=True)
         df = df.merge(df_u, 'inner', 'article_id')
-        df['ArticleDateCreated'] = pd.to_datetime(df['ArticleDateCreated'])
+        df['date'] = pd.to_datetime(df['date'])
         save_topics_to_hdf(df,suffix)
 
         if sample_size > 0:
@@ -486,9 +478,13 @@ def merge_lda_u(extend=True,sample_size=0,num_topics=80):
     
 def save_topics_to_hdf(df,suffix):
     df2 = pd.DataFrame(df.topics.values.tolist(), index = df.index)
-    df = pd.concat([df2, df[['article_id', 'ArticleDateCreated', 'ArticleContents', 'u_count', 'n_count', 'word_count']]], axis=1)
+    print(df.dtypes)
+    df = pd.concat([df2, df[['article_id', 'date', 'u_count', 'n_count', 'word_count']]], axis=1)
+    df['u_count'] = df['u_count'].astype(np.int64)
+    df['n_count'] = df['n_count'].astype(np.int64)
+    print(df.dtypes)
     del(df2)
-    df.to_hdf(params().paths['doc_topics']+'doc_topics_'+suffix+'.h5', 'table', format='fixed', mode='w', append=False)
+    df.to_hdf(params().paths['doc_topics']+'doc_topics_'+suffix+'.h5', 'table', format='table', mode='w', append=False)
 
 def extend_dict_w2v(dict_name, n_words=10):
     """
@@ -513,7 +509,7 @@ def extend_dict_w2v(dict_name, n_words=10):
                 continue
     return dict_out
 
-def uncertainty_count(extend=True):
+def uncertainty_count(extend=True, workers=16):
     """
     Counts u-words in articles. Saves result as HDF to disk.
     args:
@@ -534,22 +530,22 @@ def uncertainty_count(extend=True):
                                params().filenames['parsed_news']))
 
     #stem articles
-    with Pool(20) as pool:
+    with Pool(workers) as pool:
         df['body_stemmed'] = pool.map(_stemtext,
-                                      df['ArticleContents'].values.tolist())
+                                      df['body'].values.tolist())
     
     #compare to dictionary
-    with Pool(20) as pool:
+    with Pool(workers) as pool:
         df['u_count'] = pool.map(partial(_count, 
                                  word_set=U_set), 
                                  df['body_stemmed'].values.tolist())
     
     
     N_list = list(params().dicts['negations'].values())[0]
-    with Pool(20) as pool:
+    with Pool(workers) as pool:
         df['n_count'] = pool.map(partial(_count_n, 
                              word_list=N_list), 
-                             df['ArticleContents'])
+                             df['body'])
         
     #save to disk
     df.drop(columns='body_stemmed', inplace=True)

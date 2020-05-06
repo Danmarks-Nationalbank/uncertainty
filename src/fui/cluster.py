@@ -122,9 +122,10 @@ class ClusterTree():
         return "#666666"
     
     def _labelpicker(self,k):
-        _list = self.labels[str(k)]
-        _list.append(str(k))
-        return ', '.join(_list)
+        #_list = self.labels[str(k)]
+        #_list.append(str(k))
+        #return ', '.join(_list)
+        return self.labels[str(k)]
         
     def dendrogram(self,w=12,h=17,colors=10,
                    color_labels=True,weight_nodes=True,annotate=True):
@@ -202,20 +203,21 @@ class ClusterTree():
                 y.set_color(self.cluster_idxs[c])
             
             #tempfix
-            self.ax.get_ymajorticklabels()[21].set_color(self.cluster_idxs[20])
+            self.ax.get_ymajorticklabels()[11].set_color(self.cluster_idxs[12])
             
         self.ax.set_xlim(left=0.6)
         if annotate:
-            self.ax.annotate("Macroeconomics", (1.05,42))
-            self.ax.annotate("Financial markets", (1.08,129))
-            self.ax.annotate("Politics, domestic", (0.94,179))
-            self.ax.annotate("Politics, \ninternational", (1.03,220))
-            self.ax.annotate("Entertainment", (0.97,269))
-            self.ax.annotate("Corporate", (1.025,333))
-            self.ax.annotate("Crime", (0.925,405))
-            self.ax.annotate("Conflict", (0.975,430))
-            self.ax.annotate("Industry", (1.11,567))
-            self.ax.annotate("Environment", (1.01,777))
+            self.ax.annotate("Fiscal policy\nand corporate finance", (1.12, 43))
+            self.ax.annotate("Financial markets", (1.13, 133))
+            #self.ax.annotate("Politics, domestic", (0.94,179))
+            self.ax.annotate("Entertainment", (1.14, 225))
+            self.ax.annotate("Labor market, career \nand organization", (1.03, 295))
+            self.ax.annotate("Politics", (1.085, 383))
+            #self.ax.annotate("Crime", (0.925,405))
+            self.ax.annotate("Sports", (1.05, 460))
+            self.ax.annotate("US & UK", (1.0, 600))
+            self.ax.annotate("Industry and trade", (1.08, 770))
+            #self.ax.annotate("Environment", (1.01, 777))
                 
         plt.tight_layout()
         fig.savefig(os.path.join(params().paths['lda'], 
@@ -244,8 +246,8 @@ class ClusterTree():
         w_mid = 1.5
          
         # make pretty by extending top and bottom over the bar        
-        top[0][0] += 0.0015
-        bottom[1][0] += 0.0015        
+        top[0][0] += 0.0007
+        bottom[1][0] += 0.0007
 
         segment = [bottom,top,bar]
         widths = [w_b,w_a,w_mid]
@@ -286,6 +288,5 @@ class ClusterTree():
         
         
 if __name__ == '__main__':
-    
-    cl80 = ClusterTree(80,metric='cosine')
-    fig, ax, R = cl80.dendrogram(colors=6)
+    cl90 = ClusterTree(90,metric='cosine')
+    fig, ax, R = cl90.dendrogram(colors=8)
