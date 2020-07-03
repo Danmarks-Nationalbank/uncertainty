@@ -105,9 +105,11 @@ class BaseIndexer():
         returns:
         DataFrame of aggregation result with datetime index.
         """     
-        
+        cols = [col, 'date']
+        cols.extend(self.topics)
+
         df.set_index('date', inplace=True, drop=False)
-        idx = df[[col, 'date']].groupby(
+        idx = df[cols].groupby(
             [pd.Grouper(key='date', freq=self.frq)]
         ).agg([method])
 
@@ -116,7 +118,7 @@ class BaseIndexer():
             idx[(col+'_norm')] = _normalize(idx[col])
 
         idx = idx[str(self.start_year):str(self.end_year)+self.end_str]
-
+        idx.columns = idx.columns.get_level_values(0)
         print("Last month: ", idx[-1:])
         idx.to_pickle(params().paths['indices']+self.name+'_'+self.frq+'.pkl')
         if write_csv:
@@ -253,11 +255,11 @@ class LDAIndexer(BaseIndexer):
         if labels:
             self.label_dict = self.parse_topic_labels(labels)
         if end_year == 2020:
-            self.end_str = '-03-31'
+            self.end_str = '-04-30'
         else:
             self.end_str = ''
 
-        assert topics or xsection, "Must provide a list or dict of topics."
+        assert (topics is not None) or (xsection is not None), "Must provide a list or dict of topics."
         assert topic_thold >= 0.0 and xsection_thold >= 0.0, "No negative thresholds."
         
 
@@ -271,23 +273,7 @@ class LDAIndexer(BaseIndexer):
                 df['idx'] = df['idx']*(df['u_count']/df['word_count'])
             self.idx = self.aggregate(df)
             return self.idx
-        
-        if topics:
-            if isinstance(topics, int):
-                topics = [topics]
-            assert isinstance(topics, list) , "Keyword topics must be list or int."
-            if isinstance(topics[0], str):
-                topics = self.label_dict[topics[0]]
-            self.topics = topics
-            print(topics)
-            df['idx'] = df['topics'].apply(
-                    lambda x : np.array([j for i,j in enumerate(x) if (i in topics)]).sum())
-            df.loc[df.idx < topic_thold, 'idx'] = 0
-            if u_weight:
-                df['idx'] = df['idx']*(df['u_count']/df['word_count'])
-            self.idx = self.aggregate(df)
-            return self.idx
-        
+
         if xsection:
             assert isinstance(xsection, dict) or isinstance(xsection, list), \
             "intersection_dict must be dict or list of dict keys"
@@ -310,6 +296,36 @@ class LDAIndexer(BaseIndexer):
             self.idx = self.aggregate(df)
             return self.idx
 
+        if isinstance(topics, int):
+            topics = [topics]
+        assert isinstance(topics, list), "Keyword topics must be list or int."
+        if isinstance(topics[0], str):
+            topics = self.label_dict[topics[0]]
+        self.topics = topics
+        print(self.topics)
+        df['idx'] = df['topics'].apply(
+                lambda x : np.array([j for i, j in enumerate(x) if (i in topics)]).sum())
+        df.loc[df.idx < topic_thold, 'idx'] = 0
+        df['idx_components'] = df['topics'].apply(
+                lambda x : [j for i, j in enumerate(x) if (i in topics)])
+        df_comp = pd.DataFrame(df.idx_components.values.tolist(), index=df.index)
+        df_comp.loc[df.idx == 0] = 0
+        df_comp.rename(columns={i: j for i, j in enumerate(topics)}, inplace=True)
+        df = pd.concat([df[['date', 'idx', 'u_count', 'word_count']], df_comp], axis=1)
+        if u_weight:
+            df['idx'] = df['idx'].mul(df['u_count'], axis=0).div(df['word_count'], axis=0)
+            #contribution of each topic is normalized to sum to one (last div operation below)
+            df[df.columns[-len(topics):]] = df[df.columns[-len(topics):]].mul(df['u_count'], axis=0)\
+                .div(df['word_count'], axis=0)\
+                .div(df['idx'], axis=0)
+            df[df.columns[-len(topics):]].fillna(0, inplace=True)
+        else:
+            df[df.columns[-len(topics):]] = df[df.columns[-len(topics):]].div(df['idx'], axis=0)
+        #return df
+
+        self.idx = self.aggregate(df)
+        return self.idx
+
 class BloomIndexer(BaseIndexer):
     def build(self, logic, bloom_dict_name,
               start_year=2000, end_year=2020, frq='M', u_weight=False, extend=True):
@@ -324,7 +340,7 @@ class BloomIndexer(BaseIndexer):
         self.logic = logic
         self.frq = frq
         if self.end_year == 2020:
-            self.end_str = '-03-31'
+            self.end_str = '-04-30'
         else:
             self.end_str = ''
         

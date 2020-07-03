@@ -161,6 +161,8 @@ def get_article(url, driver):
         if _e != -1:
             return '404', '404', '404'
     headline = tree.xpath('//*[@class="headline hyphenate"]//text()')
+    if len(headline) == 0:
+        headline = tree.xpath('//*[@class="headline hyphenate "]//text()')
     headline = ' '.join(headline).strip().replace('\n', '')
     body = tree.xpath('//*[@itemprop="articleBody"]//text()')
     body = ' '.join(body).strip().replace('\n','')
@@ -182,7 +184,7 @@ def get_article(url, driver):
             print(date)
         except TypeError:
             return headline, body, date
-    return headline, body, date
+    return tree, headline, body, date
 
 def chunks(lst, n):
     """Yield successive n-sized chunks from lst."""

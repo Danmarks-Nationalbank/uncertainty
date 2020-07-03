@@ -462,8 +462,6 @@ def merge_documents_and_topics(lda_instance):
     print("\tJoin between LDA-topics and enriched documents gave {} documents... {}".format(len(df_enriched_lda),
                                                                                             timestamp()))
 
-
-
     # Save enriched documents with their topics
     folder_path = params().paths['doc_topics']
     topics_path = os.path.join(folder_path, params().filenames['lda_merge_doc_topics_file'])
@@ -474,6 +472,46 @@ def merge_documents_and_topics(lda_instance):
     df_enriched_lda = pd.concat([df2, df_enriched_lda[['article_id', 'headline', 'date']]], axis=1)
     del(df2)
     df_enriched_lda.to_hdf(os.path.join(folder_path,topics_path), 'table', format='table', mode='w', append=False)
+
+def merge_unseen_docs(lda_instance, start_date=None, end_date=None):
+    articles = read_h5py(os.path.join(params().paths['parsed_news'],
+                                      params().filenames['parsed_news']))
+
+    #subset to date range
+    if start_date is not None and end_date is not None:
+        articles = articles.loc[(articles.date >= start_date) & (articles.date < end_date)]
+        filename = params().filenames['lda_merge_doc_topics_file'] + '_' + start_date.strftime(
+            "%Y-%m-%d") + '_' + end_date.strftime("%Y-%m-%d")
+    else:
+        filename = params().filenames['lda_merge_doc_topics_file']
+
+
+    texts = list(zip(articles['article_id'].values, articles['body'].values))[1:100]
+
+    # Find document-topics for the document-intersection above
+    with Pool(6) as pool:
+        document_topics = pool.map(partial(lda_instance.get_topics,
+                                           lda_instance.lda_model,
+                                           lda_instance.dictionary),
+                                   [i[1] for i in texts])
+
+    df_lda = pd.DataFrame({'article_id': [i[0] for i in texts],
+                           'topics': [[x[1] for x in document_topics[i]] for i in range(len(document_topics))]})
+
+    df_lda = pd.merge(df_lda, articles[['article_id', 'headline', 'date']],
+                               how='inner',
+                               on='article_id')
+    print(df_lda.columns.to_list())
+
+    folder_path = params().paths['doc_topics']
+    topics_path = os.path.join(folder_path, filename)
+
+    df2 = pd.DataFrame(df_lda.topics.values.tolist(), index = df_lda.index)
+    df_enriched_lda = pd.concat([df2, df_lda[['article_id', 'headline', 'date']]], axis=1)
+    print(df_enriched_lda.columns.to_list())
+    del(df2)
+    df_enriched_lda.to_hdf(topics_path,
+                           'table', format='table', mode='w', append=False)
             
 def generate_wordclouds(lda_instance, topics=None, shade=True, title=None, num_words=15):
     """Generates word cloud images and saves to disk.

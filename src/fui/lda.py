@@ -61,7 +61,7 @@ class LDA:
             print("\tProcessing {} documents for LDA".format(len(self.articles)))
             with Pool(params().options['threads']) as pool:
                 self.articles = pool.map(partial(preprocess, 
-                                                 lemmatizer=self.lemmatizer), 
+                                                 lemmatizer=self.lemmatizer),
                                                  self.articles)
 
             print("\tSaving cleaned documents")
@@ -105,6 +105,7 @@ class LDA:
             print("Bigram phraser loaded")
         
     def get_topics(self, lda_model, dictionary, text):
+        text = preprocess(text, self.lemmatizer)
         bow = dictionary.doc2bow(self.bigram_phraser[text.split()])
         return lda_model.get_document_topics(bow, minimum_probability=0.0)
 
