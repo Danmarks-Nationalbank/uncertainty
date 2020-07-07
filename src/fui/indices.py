@@ -18,10 +18,7 @@ from multiprocessing import Pool
 from functools import partial
 from matplotlib import pyplot as plt
 from src.fui.utils import params, read_h5py, dump_csv
-
-years = mdates.YearLocator()   # every year
-months = mdates.MonthLocator((1, 4, 7, 10))
-years_fmt = mdates.DateFormatter('%Y')
+from sklearn.preprocessing import StandardScaler
 
 class BaseIndexer():
     """Base class for constructing indicies.
@@ -56,24 +53,25 @@ class BaseIndexer():
         frq = observation frequency for vix
         returns: (df,df)
         """
-        v1x = pd.read_csv(params().paths['input']+'v1x_monthly.csv', 
-                          names=['date','v1x'], header=0)
-    
-        v1x['date'] = pd.to_datetime(v1x['date'])
-        v1x.set_index('date', inplace=True)
-        v1x = v1x[str(self.start_year):str(self.end_year)+self.end_str]
-        v1x['v1x'] = _normalize(v1x['v1x'])
-        
-        vix = pd.read_csv(params().paths['input']+'vixcurrent.csv',
-                          names=['date','vix'], header=0)
+        # v1x = pd.read_csv(params().paths['input']+'v1x_monthly.csv',
+        #                   names=['date','v1x'], header=0)
+        #
+        # v1x['date'] = pd.to_datetime(v1x['date'])
+        # v1x.set_index('date', inplace=True)
+        # v1x = v1x[str(self.start_year):str(self.end_year)+self.end_str]
+        # v1x['v1x'] = _normalize(v1x['v1x'])
+
+        vix = pd.read_csv(params().paths['input'] + 'vixcurrent.csv',
+                          names=['date', 'open', 'high', 'low', 'vix'], header=1)
+        vix = vix[['date', 'vix']]
         vix['date'] = pd.to_datetime(vix['date'])
         vix.set_index('date', inplace=True)
-        vix = vix.resample(frq).last()
+        vix = vix.resample(frq).mean()
         vix.columns = vix.columns.get_level_values(0)
         vix = vix[str(self.start_year):str(self.end_year)+self.end_str]
         vix['vix'] = _normalize(vix['vix'])
                    
-        return v1x, vix
+        return vix
     
     def parse_topic_labels(self, name):
         """
@@ -92,7 +90,7 @@ class BaseIndexer():
         return self.labels
           
 
-    def aggregate(self, df, col='idx', norm=True, write_csv=True, method='mean'):
+    def aggregate(self, df, col='idx', norm=True, write_csv=True, method='mean', lda=True):
         """
         Aggregates to means within 
         each aggregation frequency
@@ -106,7 +104,8 @@ class BaseIndexer():
         DataFrame of aggregation result with datetime index.
         """     
         cols = [col, 'date']
-        cols.extend(self.topics)
+        if lda:
+            cols.extend(self.topics)
 
         df.set_index('date', inplace=True, drop=False)
         idx = df[cols].groupby(
@@ -114,8 +113,8 @@ class BaseIndexer():
         ).agg([method])
 
         if norm:
-            #normalize to mean = 0, std = 1
-            idx[(col+'_norm')] = _normalize(idx[col])
+            scaler = StandardScaler()
+            idx = pd.DataFrame(scaler.fit_transform(idx), columns=idx.columns, index=idx.index)
 
         idx = idx[str(self.start_year):str(self.end_year)+self.end_str]
         idx.columns = idx.columns.get_level_values(0)
@@ -125,7 +124,7 @@ class BaseIndexer():
             dump_csv(params().paths['indices'], self.name+'_'+self.frq, idx, verbose=False)
         return idx
 
-    def plot_index(self, plot_vix=False, annotate=True, title=None):
+    def plot_index(self, plot_vix=False, plot_bloom=False, annotate=True, title=None):
         """
         Plot index from df column named "idx_norm".
         Args:
@@ -135,9 +134,12 @@ class BaseIndexer():
         title (str): Plot title.
         Returns: plt objects (figure,axes).
         """
+
+        years = mdates.YearLocator()  # every year
+        months = mdates.MonthLocator((1, 4, 7, 10))
+        years_fmt = mdates.DateFormatter('%Y')
+
         out_path = params().paths['indices']
-        idx_col = 'idx_norm'
-        
         c = cycler(
             'color',
             [
@@ -151,20 +153,27 @@ class BaseIndexer():
         plt.rcParams["axes.prop_cycle"] = c
 
         fig, ax = plt.subplots(figsize=(14,6))
-        ax.plot(self.idx.index, self.idx[idx_col], label='Børsen Uncertainty Index')
+        ax.plot(self.idx.index, self.idx['idx'], label='Børsen Uncertainty Index')
         if title:
             ax.title.set_text(title)
         if plot_vix:
-            v1x, vix = self.load_vix(self.frq)
-            ax.plot(v1x.index, v1x.v1x, label='VDAX-NEW')
+            vix = self.load_vix(self.frq)
+            #ax.plot(v1x.index, v1x.v1x, label='VDAX-NEW')
             ax.plot(vix.index, vix.vix, label='VIX')
+        if plot_bloom:
+            bloom = pd.read_csv(params().paths['indices'] + 'bloom_'+self.frq+'.csv',
+                              names=['date', 'bloom'], header=0)
+            bloom['date'] = pd.to_datetime(bloom['date'])
+            bloom.set_index('date', inplace=True)
+            ax.plot(bloom.index, bloom.bloom, label='BB')
+
 
         ax.legend(frameon=False, loc='upper left')    
     
         ax.xaxis.set_major_locator(years)
         ax.xaxis.set_major_formatter(years_fmt)
         ax.xaxis.set_minor_locator(months)
-        
+
         if annotate:
             ax.axvspan(xmin=datetime(2000,1,31), xmax=datetime(2000,5,31), 
                        color=(102/255, 102/255, 102/255), alpha=0.3)
@@ -223,7 +232,7 @@ class LDAIndexer(BaseIndexer):
     """Class for constructing LDA indices."""    
     
     def build(self, df=None, labels='meta_topics', num_topics=80, start_year=2000, end_year=2020,
-              frq='M', topics=None, xsection=None, topic_thold=0.0, 
+              frq='Q', topics=None, xsection=None, topic_thold=0.0, norm=True,
               xsection_thold=0.1, main_topic=False, extend_u_dict=True, u_weight=True):
         """Calculates indicies.
         
@@ -293,7 +302,7 @@ class LDAIndexer(BaseIndexer):
             if u_weight:
                 df['idx'] = df['idx']*((df['n_count']+df['u_count'])/df['word_count'])
 
-            self.idx = self.aggregate(df)
+            self.idx = self.aggregate(df, norm=norm)
             return self.idx
 
         if isinstance(topics, int):
@@ -323,12 +332,12 @@ class LDAIndexer(BaseIndexer):
             df[df.columns[-len(topics):]] = df[df.columns[-len(topics):]].div(df['idx'], axis=0)
         #return df
 
-        self.idx = self.aggregate(df)
+        self.idx = self.aggregate(df, norm=norm)
         return self.idx
 
 class BloomIndexer(BaseIndexer):
     def build(self, logic, bloom_dict_name,
-              start_year=2000, end_year=2020, frq='M', u_weight=False, extend=True):
+              start_year=2000, end_year=2020, frq='Q', u_weight=False, extend=True):
         """
         Finds for articles containing words in bloom dictionary. Saves result to disk.
         args:
@@ -354,8 +363,8 @@ class BloomIndexer(BaseIndexer):
                                        params().filenames['parsed_news_uc_ext']))
         else:
             bloom_dict = params().dicts[bloom_dict_name]
-            df = read_h5py(os.path.join(params().paths['enriched_news'],
-                                       params().filenames['parsed_news_uc']))
+            df = read_h5py(os.path.join(params().paths['parsed_news'],
+                                        params().filenames['parsed_news']))
 
         b_E, b_P, b_U = _get_bloom_sets(bloom_dict)
         print('\n\nEconomic words: ' + repr(b_E) +
@@ -383,7 +392,7 @@ class BloomIndexer(BaseIndexer):
         if u_weight:
             df['idx'] = df['idx']*((df['n_count']+df['u_count'])/df['word_count'])
 
-        self.idx = self.aggregate(df)
+        self.idx = self.aggregate(df, norm=True, lda=False)
         return self.idx
 
 def _calc_corr(df1,df2):
