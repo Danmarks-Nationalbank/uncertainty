@@ -485,8 +485,7 @@ def merge_unseen_docs(lda_instance, start_date=None, end_date=None):
     else:
         filename = params().filenames['lda_merge_doc_topics_file']
 
-
-    texts = list(zip(articles['article_id'].values, articles['body'].values))[1:100]
+    texts = list(zip(articles['article_id'].values, articles['body'].values))
 
     # Find document-topics for the document-intersection above
     with Pool(6) as pool:

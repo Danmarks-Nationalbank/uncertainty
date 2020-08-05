@@ -152,7 +152,7 @@ class BaseIndexer():
             ])
         plt.rcParams["axes.prop_cycle"] = c
 
-        fig, ax = plt.subplots(figsize=(14,6))
+        fig, ax = plt.subplots(figsize=(14,8))
         ax.plot(self.idx.index, self.idx['idx'], label='Børsen Uncertainty Index')
         if title:
             ax.title.set_text(title)
@@ -224,7 +224,7 @@ class BaseIndexer():
                             fontsize='x-small', ha='center')
             #corr = _calc_corr(vix,idx[idx_name])
             #ax.text(0.80, 0.95, 'Correlation with VIX: %.2f' % round(corr,2) , transform=ax.transAxes)
-
+        plt.tight_layout()
         plt.savefig(f'{out_path}{self.name}_{self.frq}_plot.png', dpi=300)
         return fig, ax
     
@@ -264,7 +264,7 @@ class LDAIndexer(BaseIndexer):
         if labels:
             self.label_dict = self.parse_topic_labels(labels)
         if end_year == 2020:
-            self.end_str = '-04-30'
+            self.end_str = '-06-30'
         else:
             self.end_str = ''
 
@@ -349,7 +349,7 @@ class BloomIndexer(BaseIndexer):
         self.logic = logic
         self.frq = frq
         if self.end_year == 2020:
-            self.end_str = '-04-30'
+            self.end_str = '-06-30'
         else:
             self.end_str = ''
         
