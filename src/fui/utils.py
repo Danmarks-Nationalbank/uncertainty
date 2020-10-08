@@ -82,7 +82,7 @@ def dump_csv(folder_path, file_name, df, verbose=False):
     """
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
-    df.to_csv(os.path.join(folder_path, file_name+'.csv'), sep=',')
+    df.to_csv(os.path.join(folder_path, file_name+'.csv'), sep=';')
     if verbose:
         print("Wrote file '{}' with shape {} to disc".format(file_name, df.shape))
 

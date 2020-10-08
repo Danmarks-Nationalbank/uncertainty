@@ -54,9 +54,17 @@ if __name__ == '__main__':
     # agg.build(num_topics=num_topics, topics=['EP'], topic_thold=0.5, frq='M')
     # agg.plot_index(title='Economic policy uncertainty, monthly')
     #
-    bloom = BloomIndexer(name='bloom')
-    bloom.build(logic='EandPandU', bloom_dict_name='bloom', extend=False)
+    #bloom = BloomIndexer(name='bloom')
+    #bloom.build(logic='EandPandU', bloom_dict_name='bloom', extend=False)
 
-    agg = LDAIndexer(name='ep_all')
-    agg.build(num_topics=num_topics,topics=['EP'],topic_thold=0.5,frq='Q')
-    agg.plot_index(title='Economic policy uncertainty, quarterly', plot_bloom=True, plot_vix=True)
+    # agg = LDAIndexer(name='ep_all')
+    # agg.build(num_topics=num_topics,topics=['EP'],topic_thold=0.5,frq='Q')
+    # agg.plot_index(title='Economic policy uncertainty, quarterly', plot_bloom=True, plot_vix=True)
+    #
+    # agg = LDAIndexer(name='ep_all')
+    # agg.build(num_topics=num_topics,topics=['EP'],topic_thold=0.5,frq='Q')
+    # agg.plot_index(title='Economic policy uncertainty, quarterly', plot_bloom=True, plot_vix=True)
+
+    mort = LDAIndexer(name='mortgage')
+    mort.build(num_topics=num_topics,topics=['mortgage'],topic_thold=0.5,frq='Q')
+    mort.plot_index(title='Mortgage related uncertainty, quarterly', plot_bloom=False, plot_vix=False, annotate=False)

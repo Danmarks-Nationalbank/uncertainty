@@ -119,9 +119,9 @@ class BaseIndexer():
         idx = idx[str(self.start_year):str(self.end_year)+self.end_str]
         idx.columns = idx.columns.get_level_values(0)
         print("Last month: ", idx[-1:])
-        idx.to_pickle(params().paths['indices']+self.name+'_'+self.frq+'.pkl')
+        #idx.to_pickle(params().paths['indices']+self.name+'_'+self.frq+'.pkl')
         if write_csv:
-            dump_csv(params().paths['indices'], self.name+'_'+self.frq, idx, verbose=False)
+            dump_csv(params().paths['indices'], self.name+'_'+self.frq, idx.iloc[:,0], verbose=False)
         return idx
 
     def plot_index(self, plot_vix=False, plot_bloom=False, annotate=True, title=None):
@@ -165,7 +165,7 @@ class BaseIndexer():
                               names=['date', 'bloom'], header=0)
             bloom['date'] = pd.to_datetime(bloom['date'])
             bloom.set_index('date', inplace=True)
-            ax.plot(bloom.index, bloom.bloom, label='BB')
+            ax.plot(bloom.index, bloom.bloom, label='Baker & Bloom')
 
 
         ax.legend(frameon=False, loc='upper left')    
@@ -178,19 +178,19 @@ class BaseIndexer():
             ax.axvspan(xmin=datetime(2000,1,31), xmax=datetime(2000,5,31), 
                        color=(102/255, 102/255, 102/255), alpha=0.3)
             ax.annotate("Dot com \n crash", xy=(datetime(2000,3,31), 0.8),  
-                        xycoords=('data', 'axes fraction'), fontsize='x-small', ha='center')
+                        xycoords=('data', 'axes fraction'), fontsize='large', ha='center')
             ax.axvspan(xmin=datetime(2011,3,1), xmax=datetime(2012,11,30), 
                        color=(102/255, 102/255, 102/255), alpha=0.3)
             ax.annotate("Debt crisis", xy=(datetime(2012,2,15), 0.97),  
-                        xycoords=('data', 'axes fraction'), fontsize='x-small', ha='center')
+                        xycoords=('data', 'axes fraction'), fontsize='large', ha='center')
             ax.axvspan(xmin=datetime(2018,3,1), xmax=datetime(2019,12,1),
                        color=(102/255, 102/255, 102/255), alpha=0.3)
             ax.annotate("Trade war", xy=(datetime(2019,2,15), 0.97),
-                        xycoords=('data', 'axes fraction'), fontsize='x-small', ha='center')
-            ax.axvspan(xmin=datetime(2020,2,1), xmax=datetime(2020,5,1),
+                        xycoords=('data', 'axes fraction'), fontsize='large', ha='center')
+            ax.axvspan(xmin=datetime(2020,2,1), xmax=datetime(2020,7,1),
                        color=(102/255, 102/255, 102/255), alpha=0.3)
             ax.annotate("Corona crisis", xy=(datetime(2020,3,15), 0.8),
-                        xycoords=('data', 'axes fraction'), fontsize='x-small', ha='center')
+                        xycoords=('data', 'axes fraction'), fontsize='large', ha='center')
     
             dates_dict = {'Euro \nreferendum': '2000-09-28',
                           '9/11':'2001-09-11', 
@@ -212,18 +212,21 @@ class BaseIndexer():
                           #'Labor parties\n agreement': '2018-04-15',
                           'Danke Bank\n money laundering': '2018-09-15',
                           '2018 US Gov\n shutdown': '2018-12-10'}
-            
+
             heights = [0.15, 0.7, 0.8, 0.9, 0.8, 0.9, 0.8,
                        0.97, 0.9, 0.8, 0.7, 0.9, 0.7, 0.95, 0.8,
-                       0.97, 0.9, 0.7, 0.9, 0.8]
-    
+                       0.9, 0.9, 0.7, 0.9, 0.8]
+
             for l, d, h in zip(dates_dict.keys(), dates_dict.values(), heights):
                 d = datetime.strptime(d, "%Y-%m-%d")
-                ax.axvline(x=d, color=(102/255, 102/255, 102/255), alpha=0.3)
+                ax.axvline(x=d, color=(102/255, 102/255, 102/255), alpha=0.3, linewidth=2)
                 ax.annotate(l, xy=(d, h),  xycoords=('data', 'axes fraction'), 
-                            fontsize='x-small', ha='center')
+                            fontsize='medium', ha='center')
             #corr = _calc_corr(vix,idx[idx_name])
             #ax.text(0.80, 0.95, 'Correlation with VIX: %.2f' % round(corr,2) , transform=ax.transAxes)
+        ax.tick_params(axis='both', which='major', labelsize=14)
+        ax.set_ylabel("Standard deviations", fontsize='large')
+
         plt.tight_layout()
         plt.savefig(f'{out_path}{self.name}_{self.frq}_plot.png', dpi=300)
         return fig, ax
@@ -325,8 +328,8 @@ class LDAIndexer(BaseIndexer):
             df['idx'] = df['idx'].mul(df['u_count'], axis=0).div(df['word_count'], axis=0)
             #contribution of each topic is normalized to sum to one (last div operation below)
             df[df.columns[-len(topics):]] = df[df.columns[-len(topics):]].mul(df['u_count'], axis=0)\
-                .div(df['word_count'], axis=0)\
-                .div(df['idx'], axis=0)
+                .div(df['word_count'], axis=0)
+                #.div(df['idx'], axis=0)
             df[df.columns[-len(topics):]].fillna(0, inplace=True)
         else:
             df[df.columns[-len(topics):]] = df[df.columns[-len(topics):]].div(df['idx'], axis=0)
