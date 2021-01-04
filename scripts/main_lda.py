@@ -32,20 +32,20 @@ if __name__ == "__main__":
     load_model(lda_instance, 90)
     #merge_unseen_docs(lda_instance)
 
-#     print_topics(lda_instance)
-#
-#     labels = parse_topic_labels('labels', 90)
-#
-#     word_list = print_topics(lda_instance,topn=30,unique_sort=False)
-#     df = pd.DataFrame(word_list)
-#     for col in df.columns:
-#          df.rename(columns={col:labels[str(col)]}, inplace=True)
-#
-#     dft = df.transpose()
-#     dft = dft.reset_index()
-#     dft['text'] = dft.iloc[:,1:10].apply(lambda x: ', '.join(x), axis=1)
-#     print(dft.head())
-#     latex = dft.to_latex("topics_tex.tex", columns=['index', 'text'])
+    print_topics(lda_instance)
+
+    labels = parse_topic_labels('labels', 90)
+
+    word_list = print_topics(lda_instance,topn=30,unique_sort=False)
+    df = pd.DataFrame(word_list)
+    for col in df.columns:
+         df.rename(columns={col:labels[str(col)]}, inplace=True)
+
+    dft = df.transpose()
+    dft = dft.reset_index()
+    dft['text'] = dft.iloc[:,1:20].apply(lambda x: ', '.join(x), axis=1)
+    print(dft.head())
+    latex = dft.to_latex("topics_tex.tex", columns=['index', 'text'])
 #
 # #    jsd = []
 # #    for topic in topics:
