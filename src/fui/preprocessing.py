@@ -207,7 +207,7 @@ def import_csv():
     df1['body'] = df1['body'].str.replace(r'www.\S*', '', regex=True)
     df1['body_len'] = df1['body'].str.len()
 
-    df1.to_csv(params().paths['boersen_articles']+params().filenames['boersen_merged'], encoding='utf-8')
+    df1.to_csv(params().paths['boersen_articles']+params().filenames['boersen_merged'], encoding='utf-8', index=False)
 
     dtypes = {'id': 'bigint', 'headline': 'NVARCHAR(500)',
               'body': 'ntext', 'date': 'datetime2',
@@ -216,4 +216,6 @@ def import_csv():
               'body_len': 'int'}
 
     return df1, dtypes
+
+df, _ = import_csv()
 

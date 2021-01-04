@@ -549,7 +549,7 @@ def generate_wordclouds(lda_instance, topics=None, shade=True, title=None, num_w
     topic_list = lda_instance.lda_model.show_topics(formatted=False, num_topics=-1, num_words=num_words)
     if shade:
         df = pd.DataFrame([i[1] for i in topic_list]).T
-        dfu = get_unique_words(lda_instance, topn=num_words, sort=True)
+        dfu = get_unique_words(lda_instance, topn=num_words)
 
     if not topics:
         for t in range(0, lda_instance.lda_model.num_topics):
@@ -558,17 +558,17 @@ def generate_wordclouds(lda_instance, topics=None, shade=True, title=None, num_w
                 shades = dfu.xs(t, level=1, drop_level=False)
                 words = words.merge(shades, on='word').sort_values(by='scaled_weight').reset_index(drop=True).reset_index()
                 
-                cloud = WordCloud(background_color='white', font_path='C:/WINDOWS/FONTS/Nationalbank-Bold.TTF', stopwords=[],
+                cloud = WordCloud(background_color='white', font_path='C:/Users/Erik/AppData/Local/Microsoft/Windows/Fonts/Nationalbank-Bold.ttf', stopwords=[],
                                   collocations=False, color_func=MyColorFunctor(words,cmap), max_words=200, width=1000, height=600)
                 
             else:   
-                cloud = WordCloud(background_color='white', font_path='C:/WINDOWS/FONTS/Nationalbank-Bold.TTF', stopwords=[],
+                cloud = WordCloud(background_color='white', font_path='C:/Users/Erik/AppData/Local/Microsoft/Windows/Fonts/Nationalbank-Bold.ttf', stopwords=[],
                                   collocations=False, colormap=cmap, max_words=200, width=1000, height=600)
             
             topic_words = dict(topic_list[t][1])
             cloud.generate_from_frequencies(topic_words)                
             plt.gca().imshow(cloud)
-            plt.gca().set_title('Topic {}'.format(t), fontdict=dict(size=12))
+            #plt.gca().set_title('Topic {}'.format(t), fontdict=dict(size=12, fontname='Nationalbank'))
             plt.gca().axis('off')
     
             file_path = os.path.join(folder_path, '{}.png'.format(t))

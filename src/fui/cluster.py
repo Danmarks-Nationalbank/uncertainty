@@ -136,7 +136,7 @@ class ClusterTree():
         self.labels = self.parse_topic_labels('labels')
         self.colors = colors
         fig = plt.figure(figsize=(w,h)) 
-        plt.title("Topic Dendrogram")
+        #plt.title("Topic Dendrogram")
         plt.xlabel("Distance")
         #plt.ylabel("Topic")
         
@@ -207,6 +207,7 @@ class ClusterTree():
             
         self.ax.set_xlim(left=0.6)
         if annotate:
+            #self.ax.annotate("Fiscal policy", (1.08, 20))
             self.ax.annotate("Fiscal policy\nand corporate finance", (1.12, 43))
             self.ax.annotate("Financial markets", (1.13, 133))
             #self.ax.annotate("Politics, domestic", (0.94,179))
@@ -222,6 +223,8 @@ class ClusterTree():
         plt.tight_layout()
         fig.savefig(os.path.join(params().paths['lda'], 
                                    'dendrogram'+str(self.num_topics)+'.pdf'), dpi=300)
+        fig.savefig(os.path.join(params().paths['lda'],
+                                   'dendrogram'+str(self.num_topics)+'.png'), dpi=300)
 
         plt.show()
         return fig, self.ax, R
