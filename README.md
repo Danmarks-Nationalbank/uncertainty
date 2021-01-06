@@ -1,0 +1,5 @@
+# Uncertainty and the Real Economy: Evidence from Denmark
+
+This repo contains the code underlying the main results in [Uncertainty and the Real Economy: Evidence from Denmark](https://www.nationalbanken.dk/en/publications/Pages/2020/11/Working-Paper-Uncertainty-and-the-real-economy-Evidence-from-Denmark.aspx). The notebook `scripts/working_paper.ipynb` can be used to create the uncertainty indices and accompanying graphs and tables. The authors would like to thank Rastin Matin for helping to set up the LDA model. Data access is restricted, please contact the authors for more information. If you use this code, please cite:
+
+Bess, M., Grenestam, E., Pedersen, J. and Tang-Andersen Martinello, A. (2020). [Uncertainty and the real economy: Evidence from Denmark.](https://www.nationalbanken.dk/en/publications/Pages/2020/11/Working-Paper-Uncertainty-and-the-real-economy-Evidence-from-Denmark.aspx) Working paper 165, Danmarks Nationalbank.
