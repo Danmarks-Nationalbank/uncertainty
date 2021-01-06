@@ -30,7 +30,7 @@ if __name__ == "__main__":
     #save_models(lda_instance, params)
 
     load_model(lda_instance, 90)
-    #merge_unseen_docs(lda_instance)
+    merge_unseen_docs(lda_instance)
 
     print_topics(lda_instance)
 
