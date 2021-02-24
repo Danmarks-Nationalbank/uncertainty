@@ -1,35 +1,12 @@
-# =============================================================================
-# DEPRECATION WARNING:
-#
-# The file `requirements.txt` does not influence the package dependencies and
-# will not be automatically created in the next version of PyScaffold (v4.x).
-#
-# Please have look at the docs for better alternatives
-# (`Dependency Management` section).
-# =============================================================================
-#
-# Add your pinned requirements so that they can be easily installed with:
-# pip install -r requirements.txt
-# Remember to also add them in setup.cfg but unpinned.
-# Example:
-# numpy==1.13.3
-# scipy==1.0
-# Note: There's a weird bug for setting up the python kernel with pywin32, 
-# which is a requirement. To fix it, in the environment copy the dll libs in 
-# Lib/site-packages/pywin32_system32 into Lib/site-packages/win32.
-
 numpy           == 1.17.2
 pandas          == 0.25.1
 nltk            == 3.4.5
-matplotlib      == 3.0.3
-# ipython         == 7.6.0
-# ipykernel       == 5.1.2
-pylint          == 2.4.0
-# jupyterlab      == 1.1.1
+matplotlib      == 3.2.2
 gensim		== 3.8.1
 h5py 		== 2.10.0
-lemmy
+lemmy		== 2.1.0
 scipy 		== 1.3.1
-langdetect
+langdetect	== 1.0.8
 tables 		== 3.5.1
 wordcloud 	== 1.6.0
+seaborn		== 0.10.1
