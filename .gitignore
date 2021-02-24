@@ -48,13 +48,18 @@ MANIFEST
 # Per-project virtualenvs
 .venv*/
 env/*
+env_whl/*
 
 # Data folder
 data/*
+office/*
+credentials/*
 
 # Scripts we don't want to track
 scripts/scraps/*
 
 # VScode folder
 .ipynb_checkpoints*/
+.spyproject/
+
 
