@@ -539,9 +539,7 @@ def uncertainty_count(extend=True, workers=16):
     Counts u-words in articles. Saves result as HDF to disk.
     args:
         extend (bool): Use extended set of u-words
-    """ 
-#    if extend:
-#        U_set = set(list(extend_dict_w2v(dict_name, n_words=10).values())[0])
+    """
     if extend:
         U_set = set(list(params().dicts['uncertainty_ext'].values())[0])
         filename = params().filenames['parsed_news_uc_ext']
