@@ -29,7 +29,7 @@ def daterange(start_date, end_date):
 
 def get_articles(date):
     # Please contact ALEM or EGR for the API key
-    code = 'GMuZMqJne9fra7FJNhBxH5BqcWuJoRjBfrbknnG0EF/UNKyGVCr6pA=='
+    code = ''
     datestr = date.strftime("%Y%m%d")
     URL = "https://borsen-natbank-api-project.azurewebsites.net/api/RequestArticles"
     headers = {'Content-Type': 'application/x-www-form-urlencoded'}
