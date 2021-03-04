@@ -426,6 +426,9 @@ def get_unique_words(lda_instance, topn=10):
     return df_out
 
 def merge_documents_and_topics(lda_instance):
+    """
+    Merges topic weights to each article in the sample and outputs to HDF5.
+    """
     # Load parsed articles
     print("Merging documents and LDA-topics")
     articles = read_h5py(os.path.join(params().paths['parsed_news'],
