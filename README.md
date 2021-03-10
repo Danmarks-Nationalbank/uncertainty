@@ -21,3 +21,6 @@ The SVAR model is estimated using Matlab and the BEAR 4.0 toolbox, which can be 
 * `bear_settings.m` estimates the SVAR model.  
 * `manyirfs.m` reproduced the robustness checks presented by figure 5.
 * `hist_decomp.m` produces the historical decomposition presented by figures 6 and A8.
+
+## Indices
+Our index and our Danish version of the Baker, Bloom and Davis (2016) index are available as csv files in `data/`. Last update: February 2021.
