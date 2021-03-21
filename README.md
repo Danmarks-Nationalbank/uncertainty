@@ -5,11 +5,19 @@ This repo contains the code underlying the main results in [Uncertainty and the 
 Bess, M., [Grenestam, E.](http://erikgrenestam.se/research/), [Martinello, A. T.](https://alemartinello.com/) and [Pedersen, J.](https://www.nationalbanken.dk/en/research/economists/Pages/Jesper-Pedersen.aspx) (2020). [Uncertainty and the real economy: Evidence from Denmark.](https://www.nationalbanken.dk/en/publications/Pages/2020/11/Working-Paper-Uncertainty-and-the-real-economy-Evidence-from-Denmark.aspx) Working paper 165, Danmarks Nationalbank.
 
 ## Replicating the environment
-The python environment can be replicated via the `requirements.txt` file. For example, using pip on a linux machine, from the root folder:
+The python environment can be replicated via the `requirements.txt` file. On a linux machine, from the root folder:
 
 ```
 python -m venv .venv
 source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Via windows powershell:
+
+```
+python -m venv .venv
+.venv/scripts/activate
 pip install -r requirements.txt
 ```
 
