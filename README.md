@@ -31,4 +31,4 @@ The SVAR model is estimated using Matlab and the BEAR 4.0 toolbox, which can be 
 * `hist_decomp.m` produces the historical decomposition presented by figures 6 and A8.
 
 ## Indices
-Our index and our Danish version of the Baker, Bloom and Davis (2016) index are available as csv files in `data/`. Last update: February 2021.
+Our index and our Danish version of the Baker, Bloom and Davis (2016) index are available as csv files in [`data/`](https://github.com/Danmarks-Nationalbank/uncertainty/tree/master/data). Last update: February 2021.
