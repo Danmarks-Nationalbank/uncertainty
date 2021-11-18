@@ -8,6 +8,7 @@
 		"doc_topics": "data\\intermediate\\lda\\document_topics\\",
 		"topic_labels": "data\\intermediate\\lda\\topic_labels\\",
         "boersen_articles": "data\\input\\",
+		"area060": "//srv9dnbdbm078/Analyseplatform/area060/",
 		"input": "data\\input\\",
         "parsed_news": "data\\intermediate\\parsed_news\\",
 		"w2v_model": "data\\wiki.da.vec",
@@ -21,10 +22,10 @@
 		"boersen_csv2": "Nat_bank_articles2.csv",
 		"boersen_csv3": "Nat_bank_articles3.csv",
 		"bloom_scores": "bloom_scores",
-		"lda_cleaned_text": "parsed_strings.hdf5",
+		"lda_cleaned_text": "parsed_strings.ftr",
 		"lda_dictionary": "dictionary.pkl",
 		"lda_merge_doc_topics_file": "document_topics.h5",
-		"parsed_news": "boersen_parsed.h5",
+		"parsed_news": "boersen_parsed",
 		"parsed_news_uc_ext": "boersen_parsed_uc_ext.h5",
 		"parsed_news_uc": "boersen_parsed_uc.h5"
 	},
@@ -32,18 +33,19 @@
 		"bloom": {
 			"economic": ["erhverv", "forretning", "handel", "økonomi", "økonomisk"],
 			"political": ["politik", "regulering", "skat", "udgift", "underskud", "nationalbank", "folketing", "regering"],
-			"uncertainty": ["usik", "usikker"]
+			"uncertainty": ["usik", "usikker", "usikkerhed", "usikkert"]
 		},
 		"bloom_extended": {
 			"economic": ["erhverv", "forretning", "handel", "økonomi", "økonomisk"],
 			"political": ["politik", "regulering", "skat", "udgift", "underskud", "nationalbank", "folketing", "regering", "ECB", "Washington", "EU", "Bruxelles", "Bryssel"],
-			"uncertainty": ["usik", "usikker", "uvis", "mistro"]
+			"uncertainty": ["usikker", "usikkerhed", "usikkert", "uvis", "uklar"]
 		},
 		"uncertainty": {
 			"uncertainty": ["usikker", "usikkerhed", "usikkert"]
 		},
 		"uncertainty_ext": {
-    			"uncertainty": ["forment","uklar","uklart","usik","usikker","uvist","usikkert"]
+				"uncertainty": ["uklar","usikker","uvis"],
+    			"uncertainty_org": ["forment","uklar","uklart","usik","usikker","uvist","usikkert"]
 		},	
 		"bloom_extended_unstem": {
 			"economic": ["erhverv", "forretning", "handel", "økonomi", "økonomisk"],
@@ -74,6 +76,6 @@
 			"test_size": 10000,
 			"tf-idf": 0
 		},
-    "threads": 10
+    "threads": 3
     }
 }
