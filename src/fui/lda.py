@@ -1,26 +1,28 @@
 # -*- coding: utf-8 -*-
 
-import gensim
-import h5py
-import numpy as np
-import os
-import random
 import warnings
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    import gensim
+import pandas as pd
+import os
+import warnings
+from sqlalchemy import create_engine
 
-from src.fui.ldatools import preprocess
-from src.fui.utils import params, read_h5py
-from functools import partial
-from multiprocessing import Pool
+
+
+from src.fui.ldatools import get_topics
+from src.fui.indices import import_word_counts
+from src.fui.utils import params
 
 class LDA:
-    def __init__(self, lemmatizer, test_share=0.05, test=False):
+    def __init__(self, num_topics=None):
         self.dictionary = None
         self.articles = []
-        self.article_id = []
-        self.SerializedCorpus = None
-        self.test = test        
-        self.lemmatizer = lemmatizer
-        self.test_share = test_share
+        self.article_ids = []
+        self.lda_model = None
+        if num_topics is not None:
+            self.load_model(num_topics)
                 
         #if params().options['lda']['log']:
         import logging
@@ -37,57 +39,95 @@ class LDA:
         for line in self.articles:
             yield self.bigram_phraser[line.split()]
 
-    def load_and_clean_body_text(self):
-        print("No existing pre-processed data found. Loading h5-file for preprocessing")
+    def load_articles(self, chunksize=100000):
+        print("Loading preprocessed data from SRV9DNBDBM078")
+        df = import_word_counts(chunksize=chunksize)
+        for c in df:
+            self.article_ids.extend(c['DNid'].values.tolist())
+            self.articles.extend(c['body'].values.tolist())
+        print("\t{} documents loaded".format(len(self.articles)))
 
-        df = read_h5py(os.path.join(params().paths['parsed_news'],
-                                    params().filenames['parsed_news']))
+    def _get_unprocessed_articles(self, chunksize=None):
+        sql = """
+            select a.DNid
+    		,a.body
+    		from area060.article_word_counts a
+    		LEFT JOIN area060.article_topics b on a.DNid = b.DNid
+    		where b.DNid IS NULL
+    		"""
+        engine = create_engine(
+            'mssql+pyodbc://SRV9DNBDBM078/workspace01?trusted_connection=yes&driver=ODBC+Driver+17+for+SQL+Server')
+        df = pd.read_sql(sql, con=engine, chunksize=chunksize)
+        return df
+
+    def load_new_articles(self, chunksize=None):
+        print("Loading unprocessed articles from sql")
+        df = self._get_unprocessed_articles(chunksize=chunksize)
+        if chunksize is None:
+            self.article_ids = df['DNid'].values.tolist()
+            self.articles = df['body'].values.tolist()
+        else:
+            for c in df:
+                self.article_ids.extend(c['DNid'].values.tolist())
+                self.articles.extend(c['body'].values.tolist())
+        if len(self.articles) == 0:
+            print("No new articles to process for LDA.")
+        else:
+            print("\t{} new articles found, processing for LDA...".format(len(self.articles)))
+            get_topics(self)
+
+    def create_dictionary(self, load_bigrams=True, unwanted_words=None, keep_words=None):
+        # Create dictionary (id2word)
+        file_path = os.path.join(params().paths['lda'], params().filenames['lda_dictionary'])
+
+        # Load bigram phraser
+        if load_bigrams:
+            self.load_bigrams()
 
         try:
-            self.articles.extend(list(df['body'].values))
-            self.article_id.extend(list(df['article_id'].values))
-        except KeyError:
-            print("File doesn't contain any body-text")
+            self.dictionary = gensim.corpora.Dictionary.load(file_path)
+            print("Loaded pre-existing dictionary")
+        except FileNotFoundError:
+            print("Dictionary not found, creating from scratch")
 
-        # Perform LDA on smaller sample, just for efficiency in case of testing...
-        if self.test is True:
-            random.seed(1)
-            test_idx = random.sample(range(0, len(self.articles)), params().options['lda']['test_size'])
-            self.articles = [self.articles[i] for i in test_idx]
-            self.article_id = [self.article_id[i] for i in test_idx]
+            self.dictionary = gensim.corpora.Dictionary(articles for articles in self)
 
-        # Pre-process LDA-docs
-        if len(self.articles):
-            print("\tProcessing {} documents for LDA".format(len(self.articles)))
-            with Pool(params().options['threads']) as pool:
-                self.articles = pool.map(partial(preprocess, 
-                                                 lemmatizer=self.lemmatizer),
-                                                 self.articles)
+            self.dictionary.filter_extremes(no_below=params().options['lda']['no_below'],
+                                                    no_above=params().options['lda']['no_above'],
+                                                    keep_n=params().options['lda']['keep_n'],
+                                                    keep_tokens=keep_words)
+            if unwanted_words is None:
+                unwanted_words = []
+            unwanted_ids = [k for k, v in self.dictionary.items() if v in unwanted_words]
+            self.dictionary.filter_tokens(bad_ids=unwanted_ids)
+            self.dictionary.compactify()
+            self.dictionary.save(file_path)
+        print("\t{}".format(self.dictionary))
 
-            print("\tSaving cleaned documents")
-            folder_path = params().paths['lda']
-            if not os.path.exists(folder_path):
-                os.makedirs(folder_path)
+    def create_corpus(self):
+        #Helper-class to create BoW-corpus "lazily"
+        corpus_bow = LdaIterator(self)
 
-            file_path = os.path.join(folder_path, params().filenames['lda_cleaned_text'])
-            with h5py.File(file_path, 'w') as hf:
-                data = np.array(list(zip(self.article_id, self.articles)), dtype=object)
-                string_dt = h5py.string_dtype(encoding='utf-8')
-                hf.create_dataset('parsed_strings', data=data, dtype=string_dt)
-        # Train bigram model
-        self.load_bigrams()
-
-    def load_processed_text(self):
+        file_path = os.path.join(params().paths['lda'], 'corpus.mm')
         try:
-            with h5py.File(os.path.join(params().paths['lda'], params().filenames['lda_cleaned_text']), 'r') as hf:
-                print("Loading processed data from HDF-file")
-                hf = hf['parsed_strings'][:]
-                self.article_id = list(zip(*hf))[0]
-                self.articles = list(zip(*hf))[1]
-                print("\t{} documents loaded".format(len(self.articles)))
-            return 1
-        except OSError:
-            return 0
+            self.Corpus = gensim.corpora.MmCorpus(file_path)
+            print("Loaded pre-existing corpus")
+        except FileNotFoundError:
+            print("Corpus not found, creating from scratch")
+            if not hasattr(self, 'bigram_phraser'):
+                self.load_bigrams()
+
+            # Serialize corpus (either BoW or tf-idf)
+            if not params().options['lda']['tf-idf']:
+                print("\tSerializing corpus, BoW")
+                gensim.corpora.MmCorpus.serialize(file_path, corpus_bow)
+            else:
+                print("\tSerializing corpus, tf-idf")
+                tfidf = gensim.models.TfidfModel(corpus_bow)
+                train_corpus_tfidf = tfidf[corpus_bow]
+                gensim.corpora.MmCorpus.serialize(file_path, train_corpus_tfidf)
+
+            self.Corpus = gensim.corpora.MmCorpus(file_path)
     
     def load_bigrams(self):
         if os.path.isfile(os.path.join(params().paths['lda'],'phrases.pkl')):
@@ -96,16 +136,47 @@ class LDA:
             print("Bigram phraser loaded")
         else:
             print("Bigram phraser not found, training")
-            with h5py.File(os.path.join(params().paths['lda'], params().filenames['lda_cleaned_text']), 'r') as hf:
-                hf = hf['parsed_strings'][:]
-                articles_to_phrasing  = [a[1].split() for a in hf]
-            phrases = gensim.models.phrases.Phrases(articles_to_phrasing, params().options['lda']['no_below'], threshold=100)
-            phrases.save(os.path.join(params().paths['lda'],'phrases.pkl'), separately=None, sep_limit=10485760, ignore=frozenset([]), pickle_protocol=2)
-            self.bigram_phraser = gensim.models.phrases.Phraser(phrases)
+            self.load_processed_text()
+            phrases = gensim.models.phrases.Phrases(self.articles, params().options['lda']['no_below'], threshold=100)
+            frozen_model = phrases.freeze()
+            frozen_model.save(os.path.join(params().paths['lda'],'phrases.pkl'), separately=None, sep_limit=10485760, ignore=frozenset([]), pickle_protocol=2)
+            self.bigram_phraser = gensim.models.phrases.Phraser(frozen_model)
             print("Bigram phraser loaded")
-        
-    def get_topics(self, lda_model, dictionary, text):
-        text = preprocess(text, self.lemmatizer)
-        bow = dictionary.doc2bow(self.bigram_phraser[text.split()])
-        return lda_model.get_document_topics(bow, minimum_probability=0.0)
 
+    def get_doc_topics(self):
+        self.Corpus = gensim.corpora.mmcorpus.MmCorpus(os.path.join(params().paths['lda'], 'corpus.mm'))
+        for bow, id in zip(self.Corpus, self.article_ids):
+            # try:
+            #     bow = self.dictionary.doc2bow(self.bigram_phraser[article.split()])
+            # except AttributeError:
+            #     print(article)
+            #     continue
+            yield [self.lda_model.get_document_topics(bow, minimum_probability=0.01), id]
+
+    def _worker(self, pair):
+        topics = self.lda_model.get_document_topics(pair[0], minimum_probability=0.0)
+        line = [pair[1]]
+        line.extend([i[1] for i in topics])
+        return line
+
+    def get_topics_list(self):
+        return list(self.get_topics())
+        #bow = self.dictionary.doc2bow(self.bigram_phraser[text.split()])
+        #return self.lda_model.get_document_topics(bow, minimum_probability=0.0)
+
+    def load_model(self, num_topics):
+        try:
+            folder_path = os.path.join(params().paths['root'], params().paths['lda'], 'lda_model_' + str(num_topics))
+            file_path = os.path.join(folder_path, 'trained_lda')
+            self.lda_model = gensim.models.LdaMulticore.load(file_path)
+            print("LDA-model with {} topics loaded".format(num_topics))
+        except FileNotFoundError:
+            print("Error: LDA-model not found")
+
+class LdaIterator:
+    def __init__(self, lda_instance):
+        self.lda = lda_instance
+
+    def __iter__(self):
+        for l in self.lda.articles:
+            yield self.lda.dictionary.doc2bow(self.lda.bigram_phraser[l.split()])

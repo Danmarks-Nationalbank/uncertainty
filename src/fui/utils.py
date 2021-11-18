@@ -7,7 +7,7 @@ import shutil
 import datetime
 import pickle
 import codecs
-#import h5py
+import h5py
 import pandas as pd
 
 def main_directory():
@@ -35,14 +35,10 @@ def dump_hdf(folder_path, file_name, df, verbose=False):
 
 
 def read_hdf(file_path, verbose=False, obj='table'):
-    try:
-        df = pd.read_hdf(file_path, obj)
-        if verbose:
-            print("Loaded pickle with {} rows".format(len(df)))
-        return df
-    except FileNotFoundError:
-        print("File not found!")
-        return None
+    df = pd.read_hdf(file_path, obj)
+    if verbose:
+        print("Loaded pickle with {} rows".format(len(df)))
+    return df
 
 def read_h5py(file_path, obj='parsed_strings'):
     try:
