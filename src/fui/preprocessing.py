@@ -14,7 +14,6 @@ import warnings
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     import gensim
-from pathlib import Path
 
 def _remove_stopwords(word_list, stopwords):
     word_list = [word for word in word_list if word not in stopwords]
@@ -29,7 +28,7 @@ def _load_stopwords(stopfile):
 
 def preprocess(df, idx=0, sample=False, new=True):
     lemmatizer = lemmy.load("da")
-    stopfile = Path(__file__).parents[2] / 'data' / 'stopwords.txt'
+    stopfile = params().paths['input']+'stopwords.txt'
     stopwords = _load_stopwords(stopfile=str(stopfile))
     df['date'] = pd.to_datetime(df['date'], format='%Y-%m-%d')
     df['year'] = df['date'].dt.year
@@ -85,10 +84,6 @@ def preprocess(df, idx=0, sample=False, new=True):
         #    insert_article_counts(file_name)
 
     return df
-
-    #with h5py.File(os.path.join(params().paths['parsed_news'],params().filenames['parsed_news']), 'w') as hf:
-    #    string_dt = h5py.string_dtype(encoding='utf-8')
-    #    hf.create_dataset('parsed_strings', data=df, dtype=string_dt)
 
 def parse_for_lda(only_new=True, sample=False, chunksize=None):
     if sample:
