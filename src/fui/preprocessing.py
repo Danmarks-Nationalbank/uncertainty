@@ -25,7 +25,6 @@ except ImportError:
 
 def _remove_stopwords(word_list, stopwords):
     word_list = [word for word in word_list if word not in stopwords]
-    word_list = [word for word in word_list if word not in stopwords]
     return word_list
 
 def _load_stopwords(stopfile):
