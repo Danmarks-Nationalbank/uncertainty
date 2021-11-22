@@ -8,14 +8,23 @@ import re
 from functools import partial
 from sqlalchemy import create_engine
 from multiprocessing import Pool
-import lemmy
 from src.fui.utils import params
 import warnings
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     import gensim
+try:
+    import lemmy
+except ImportError:
+    import subprocess
+    import sys
+    lemmypath = os.path.join(os.path.dirname(__file__), 'lemmy-2.1.0-py2.py3-none-any.whl')
+    print(f'Module "lemmy" not found, installing {lemmypath}...')
+    subprocess.check_call([sys.executable, "-m", "pip", "install", lemmypath])
+
 
 def _remove_stopwords(word_list, stopwords):
+    word_list = [word for word in word_list if word not in stopwords]
     word_list = [word for word in word_list if word not in stopwords]
     return word_list
 
