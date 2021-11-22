@@ -144,13 +144,14 @@ class LDA:
             print("Bigram phraser loaded")
 
     def get_doc_topics(self):
-        self.Corpus = gensim.corpora.mmcorpus.MmCorpus(os.path.join(params().paths['lda'], 'corpus.mm'))
-        for bow, id in zip(self.Corpus, self.article_ids):
-            # try:
-            #     bow = self.dictionary.doc2bow(self.bigram_phraser[article.split()])
-            # except AttributeError:
-            #     print(article)
-            #     continue
+        if len(self.articles) == 0:
+            self.load_articles()
+        for article, id in zip(self.articles, self.article_ids):
+            try:
+                bow = self.dictionary.doc2bow(self.bigram_phraser[article.split()])
+            except AttributeError:
+                print(article)
+                continue
             yield [self.lda_model.get_document_topics(bow, minimum_probability=0.01), id]
 
     def _worker(self, pair):

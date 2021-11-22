@@ -476,16 +476,6 @@ def merge_lda_u(num_topics=90):
     del(df_topics)
 
     return df
-    
-def save_topics_to_hdf(df,suffix):
-    df2 = pd.DataFrame(df.topics.values.tolist(), index = df.index)
-    print(df.dtypes)
-    df = pd.concat([df2, df[['article_id', 'date', 'u_count', 'n_count', 'word_count']]], axis=1)
-    df['u_count'] = df['u_count'].astype(np.int64)
-    df['n_count'] = df['n_count'].astype(np.int64)
-    print(df.dtypes)
-    del(df2)
-    df.to_hdf(params().paths['doc_topics']+'doc_topics_'+suffix+'.h5', 'table', format='table', mode='w', append=False)
 
 def extend_dict_w2v(dict_name, n_words=10):
     """
@@ -530,7 +520,7 @@ def import_article_topics(first_year=2020, chunksize=1000000):
         SELECT [DNid]
               ,[topic]
               ,[probability]
-          FROM [workspace01].[area060].[article_topics]
+          FROM [workspace01].[area060].[article_topics_new]
 		"""
     engine = create_engine(
         'mssql+pyodbc://SRV9DNBDBM078/workspace01?trusted_connection=yes&driver=ODBC+Driver+17+for+SQL+Server')

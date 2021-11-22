@@ -2,10 +2,7 @@
 	"paths": {
 		"root" : "C:\\projects\\FUI\\",
 		"scraped":  "data\\borsen\\scraped\\",
-        "enriched_news": "data\\intermediate\\enriched_news\\",
-        "firm_events": "data\\intermediate\\firm_events\\",
 		"lda": "data\\intermediate\\lda\\",
-		"doc_topics": "data\\intermediate\\lda\\document_topics\\",
 		"topic_labels": "data\\intermediate\\lda\\topic_labels\\",
         "boersen_articles": "data\\input\\",
 		"area060": "//srv9dnbdbm078/Analyseplatform/area060/",
@@ -67,7 +64,6 @@
 		},
 		"bloom_logic_weighted": "bool(bloom_E & stem_set) and bool(bloom_P & stem_set)",
 		"lda": {
-			"features": ["LM_negative", "LM_positive", "VD_neg", "VD_pos", "VD_compound", "PC_negative", "PC_difference"],
 			"log": 0,
 			"keep_n": 100000,
 			"no_above": 0.50,
