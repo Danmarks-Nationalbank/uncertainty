@@ -35,14 +35,10 @@ def dump_hdf(folder_path, file_name, df, verbose=False):
 
 
 def read_hdf(file_path, verbose=False, obj='table'):
-    try:
-        df = pd.read_hdf(file_path, obj)
-        if verbose:
-            print("Loaded pickle with {} rows".format(len(df)))
-        return df
-    except FileNotFoundError:
-        print("File not found!")
-        return None
+    df = pd.read_hdf(file_path, obj)
+    if verbose:
+        print("Loaded pickle with {} rows".format(len(df)))
+    return df
 
 def read_h5py(file_path, obj='parsed_strings'):
     try:
@@ -151,38 +147,3 @@ class _Singleton:
             if not os.path.exists(folder_path):
                 os.makedirs(folder_path)
 
-def create_empty_table(dict, table_name):
-    query = f'CREATE TABLE [workspace01].[area028].[{table_name}](' + \
-            ', '.join(['%s %s' % (key, value) for (key, value) in dict.items()]) + \
-            ');'
-    execute_query(f"DROP TABLE [workspace01].[area028].[{table_name}];")
-    execute_query(query)
-    return query
-
-def execute_query(sql_query):
-    """
-    General utility to pass a SQL query to our server
-    """
-    with pyodbc.connect(driver='{ODBC Driver 17 for SQL Server}',
-                        server='SRV9DNBDBM078', database='workspace01', Trusted_Connection='Yes') as con:
-        try:
-            con.execute(sql_query)
-            print('Query executed')
-            return 1
-        except pyodbc.ProgrammingError:
-            print('Query ProgrammingError')
-            return 0
-
-def bulk_insert(table_name, file_name, fieldterminator = r","):
-    """
-    Function to bulk insert `file_name` into `table_name`. `table_name` has to
-    be present already in the sql server. `file_name` should be a tab-separated
-    csv file located in //srv9dnbdbm078/Analyseplatform/area028/. To modify the
-    bulk inster query, edit the file under `sql/upload/create_table_parsed_news.sql`
-    """
-    with open('../sql/bulk_import_to_table.sql', 'r') as q:
-        query = """{}""".format(
-            q.read().replace('__TABLE_NAME__', table_name).replace('__FILE_NAME__', file_name).replace(
-                '__FIELDTERMINATOR__', fieldterminator)
-            )
-    execute_query(query)

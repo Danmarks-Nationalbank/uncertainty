@@ -1,27 +1,41 @@
 # -*- coding: utf-8 -*-
 import os
 import pandas as pd
-import pickle
-import h5py
 import glob
 import html
 import numpy as np
+import re
+from functools import partial
+from sqlalchemy import create_engine
+from multiprocessing import Pool
+import lemmy
 from src.fui.utils import params
+import warnings
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    import gensim
 
-def parse_for_lda(nrows=None):
-    """
-    Loads the data from CSV and performs some basic cleaning. Essentially the
-    cleaning removes corrupted lines.
-    """
-    # Load the data
-    df, _ = import_csv()
+def _remove_stopwords(word_list, stopwords):
+    word_list = [word for word in word_list if word not in stopwords]
+    return word_list
 
+def _load_stopwords(stopfile):
+    if not os.path.exists(stopfile):
+        raise Exception('No stopword file in directory')
+    stopwords_file = open(stopfile, "r")
+    stopwords = stopwords_file.read().splitlines()
+    return stopwords
+
+def preprocess(df, idx=0, sample=False, new=True):
+    lemmatizer = lemmy.load("da")
+    stopfile = params().paths['input']+'stopwords.txt'
+    stopwords = _load_stopwords(stopfile=str(stopfile))
     df['date'] = pd.to_datetime(df['date'], format='%Y-%m-%d')
     df['year'] = df['date'].dt.year
     df = df[df['year'] > 1999]
 
     #drop irrelevant section names
-    start_n = df.shape[0] 
+    start_n = df.shape[0]
     df = df[~df['section_name'].isin(['Biler', 'Bolig-besøg', 'Bolig-indret','Bolig-items','Cannes','Cannes Lions',
                                      'Design', 'Digital Gadget', 'Gastronomi', 'Karriere', 'Kriminal', 'Kultur',
                                      'Livsstil', 'Magasin Pleasure', 'Magasin Pleasure 2. sektion', 'Magasin Pleasure 2. sektion Rejser',
@@ -33,7 +47,7 @@ def parse_for_lda(nrows=None):
                                      'Week-livsstil', 'Week-mad', 'Week-maritim', 'Week-mode', 'Week-motor', 'Week-rejser',
                                      'Weekend Diverse', 'Weekend Golf','Weekend Kultur','Weekend Livsstil',
                                      'Weekend Livstil','Weekend Mad','Weekend Maritim','Weekend Mode','Weekend Motor',
-                                     'Weekend Outdoor', 'Weekend Rejser'])]
+                                     'Weekend Outdoor', 'Weekend Rejser', 'Sponsoreret'])]
     end_n = df.shape[0]
     print('Dropped {} articles with irrelevant section names'.format(start_n-end_n))
     print(f'Current number of articles: {end_n}')
@@ -46,66 +60,122 @@ def parse_for_lda(nrows=None):
     print('Dropped {} articles with less than 50 words'.format(start_n-end_n))
     print(f'Current number of articles: {end_n}')
 
-    df['body'] = __clean_text(df['body'])
+    # # Pre-process LDA-docs
+    print(f"Preprocessing {end_n} documents...")
+    with Pool(params().options['threads']) as pool:
+        df['body'] = pool.map(partial(_clean_text, lemmatizer=lemmatizer, stopwords=stopwords), df['body'].values.tolist())
+    df = df.loc[~df['body'].isna()]
 
-    # create unique row index
-    df['article_id'] = df.reset_index().index
+    df = uncertainty_count(df)
+
     print('Columns: ', df.columns)
-    
-    with h5py.File(os.path.join(params().paths['parsed_news'],params().filenames['parsed_news']), 'w') as hf:
-        string_dt = h5py.string_dtype(encoding='utf-8')
-        hf.create_dataset('parsed_strings', data=df, dtype=string_dt)
+    df = df[['DNid', 'body', 'u_count', 'n_count', 'word_count']]
+    df['word_count'] = df['word_count'].astype(int)
+    if sample:
+        df.reset_index(drop=True).to_feather(os.path.join(params().paths['parsed_news'], params().filenames['parsed_news'])+f'_sample.ftr')
+        df.reset_index(drop=True).to_csv(os.path.join(params().paths['area060'], params().filenames['parsed_news'])+f'_sample.csv', index=False)
+    else:
+        file_name = os.path.join(params().paths['area060'], params().filenames['parsed_news']) + f'_part{idx}.csv'
+        # df.reset_index(drop=True).to_feather(file_name+'.ftr')
+        df.reset_index(drop=True).to_csv(file_name, index=False)
+        #if new:
+        #    update_article_counts(file_name)
+        #else:
+        #    insert_article_counts(file_name)
 
-def __clean_text(series):
-    """
-    ProcessTools: Clean raw text
-    """
+    return df
+
+def parse_for_lda(only_new=True, sample=False, chunksize=None):
+    if sample:
+        df = import_articles(sample=True, chunksize=None)
+        df = preprocess(df, new=False)
+        return df
+
+    elif only_new:
+        df = import_new_articles(check_from=2020, chunksize=None)
+        df = preprocess(df, new=True)
+        return df
+
+    else:
+        df = import_articles(sample=False, chunksize=chunksize)
+        if chunksize:
+            for i, c in enumerate(df):
+                preprocess(c, i, new=False)
+            return 1
+        else:
+            df = preprocess(df, new=False)
+            return df
+
+
+
+def _clean_text(text, lemmatizer, stopwords):
     # Step 1: Remove html tags
-    print('Step 1: Removing tags')
-    series = series.str.replace(r'<[^>]*>','',regex=True)
-    series = series.str.replace(r'https?:\/\/\S*','',regex=True)
-    series = series.str.replace(r'www.\S*','',regex=True)
+    text = re.sub(r'<[^>]*>', '', text)
+    text = re.sub(r'https?:\/\/\S*', '', text)
+    text = re.sub(r'www.\S*', '', text)
         
     # Step 2: Remove everything following these patterns (bylines)     
-    print('Step 2: Removing bylines')
     pattern = "|".join(
         [r'\/ritzau/AFP', r'Nyhedsbureauet Direkt', r'\w*\@borsen.dk\b', r'\/ritzau/', r'\/ritzau/FINANS'])
-    series = series.str.replace(pattern,'',regex=True)
+    text = re.sub(pattern, '', text)
 
     # Step 3: Remove \n, \t
-    print('Step 3: Removing other')
-    series = series.str.replace(r'\n', ' ')
-    series = series.str.replace(r'\t', ' ')
+    text = text.replace(r'\n', ' ')
+    text = text.replace(r'\t', ' ')
+    text = text.replace(u'\xa0', u' ')
 
     # Step 4: Remove additional whitespaces
-    #series = series.str.split().str.join(' ')
+    #text = text.str.split().str.join(' ')
 
-    # Step 5: Convert to lowercase
-    series = series.str.lower()
-    
     # Step 6: Unescape any html entities
-    print('Step 6: Unescape html')
-    series = series.apply(html.unescape)
+    text = html.unescape(text)
     
     # Manually remove some html
-    series = series.str.replace(r'&rsquo', '')
-    series = series.str.replace(r'&ldquo', '')
-    series = series.str.replace(r'&rdquo', '')
-    series = series.str.replace(r'&ndash', '')
-    
-    return series
+    text = text.replace(r'&rsquo', '')
+    text = text.replace(r'&ldquo', '')
+    text = text.replace(r'&rdquo', '')
+    text = text.replace(r'&ndash', '')
 
-def load_parsed_data(sample_size=None):
-    filelist = glob.glob(params().paths['parsed_news']+'boersen*.pkl') 
-    df = pd.DataFrame()
-    for f in filelist:    
-        with open(f, 'rb') as f_in:
-            df_n = pickle.load(f_in)
-            df = df.append(df_n)
-    if sample_size is not None:
-        return df.sample(sample_size)
+    error = ['år', 'bankernes', 'bankerne', 'dst', 'priser', 'bankers']
+    drop = ['bre', 'nam', 'ritzau', 'st', 'le', 'sin', 'år', 'stor', 'me', 'når', 'se', 'dag', 'en', 'to', 'tre',
+            'fire', 'fem', 'seks', 'syv', 'otte', 'ni', 'ti']
+
+    tokens = gensim.utils.simple_preprocess(text, deacc=False, min_len=2, max_len=25)
+    tokens = _remove_stopwords(tokens, stopwords)
+    tokens = [lemmatizer.lemmatize("", word)[0] for word in tokens if not word in error]
+
+
+    tokens = [w for w in tokens if not w in drop]
+    tokens = [w.replace("bankernes", "bank") for w in tokens]
+    tokens = [w.replace("bankers", "bank") for w in tokens]
+    tokens = [w.replace("kris", "krise") for w in tokens]
+    tokens = [w.replace("bile", "bil") for w in tokens]
+    tokens = [w.replace("bankerne", "bank") for w in tokens]
+    tokens = [w.replace("priser", "pris") for w in tokens]
+    tokens = [w for w in tokens if not w.isdigit()]
+
+    string = ' '.join([word for word in tokens])
+    if re.search('[a-zA-Z]', string) is None:
+        string = np.NaN
+
+    return string
+
+def load_parsed_data(sample = False):
+    if sample:
+        article_files = glob.glob(os.path.join(params().paths['parsed_news'],
+                                               params().filenames['parsed_news']) + '_sample.ftr')[0]
+        df = pd.read_feather(article_files)
     else:
-        return df
+        article_files = glob.glob(os.path.join(params().paths['parsed_news'],
+                                               params().filenames['parsed_news']) + '_part*.ftr')
+        if len(article_files) == 0:
+            raise FileNotFoundError(f"{os.path.join(params().paths['parsed_news'],params().filenames['parsed_news'])} not found")
+        df_list = []
+        for f in article_files:
+            df = pd.read_feather(f)
+            df_list.append(df)
+        df = pd.concat(df_list)
+    return df
 
 def import_scraped_articles():
     path = params().paths['scraped']  # use your path
@@ -217,5 +287,102 @@ def import_csv():
 
     return df1, dtypes
 
-df, _ = import_csv()
+def import_new_articles(check_from=2020, chunksize=None):
+    sql = f"""
+            select 
+              a.[DNid]  
+              ,a.[date]
+              ,a.[headline]
+              ,a.[body]
+              ,a.[byline]
+              ,a.[byline_alt]
+              ,a.[category]
+              ,a.[section_name]
+              ,a.[id]
+              ,a.[article_id]
+              ,a.[version_id]
+                from area060.all_articles a
+                LEFT JOIN area060.article_word_counts b on a.DNid = b.DNid
+                where b.DNid IS NULL and year(a.date) >= {check_from}
+		"""
+    engine = create_engine(
+        'mssql+pyodbc://SRV9DNBDBM078/workspace01?trusted_connection=yes&driver=ODBC+Driver+17+for+SQL+Server')
+    df = pd.read_sql(sql, con=engine, chunksize=chunksize)
+    return df
 
+def import_articles(sample=False, chunksize=None):
+    if not sample:
+        sql = """SELECT
+              [DNid]  
+              ,[date]
+              ,[headline]
+              ,[body]
+              ,[byline]
+              ,[byline_alt]
+              ,[category]
+              ,[section_name]
+              ,[id]
+              ,[article_id]
+              ,[version_id]
+          FROM [workspace01].[area060].[all_articles]
+        """
+        engine = create_engine(
+            'mssql+pyodbc://SRV9DNBDBM078/workspace01?trusted_connection=yes&driver=ODBC+Driver+17+for+SQL+Server')
+        df = pd.read_sql(sql, con=engine, chunksize=chunksize)
+    else:
+        sql = """SELECT TOP 1000
+              [DNid] 
+              ,[date]
+              ,[headline]
+              ,[body]
+              ,[byline]
+              ,[byline_alt]
+              ,[category]
+              ,[section_name]
+              ,[id]
+              ,[article_id]
+              ,[version_id]
+          FROM [workspace01].[area060].[all_articles]
+          ORDER BY NEWID()
+        """
+        engine = create_engine(
+            'mssql+pyodbc://SRV9DNBDBM078/workspace01?trusted_connection=yes&driver=ODBC+Driver+17+for+SQL+Server')
+        df = pd.read_sql(sql, con=engine, chunksize=None)
+    return df
+
+def uncertainty_count(df, extend=True, workers=3):
+    """
+    Counts u-words in articles. Saves result as HDF to disk.
+    args:
+        extend (bool): Use extended set of u-words
+    """
+    if extend:
+        U_set = set(list(params().dicts['uncertainty_ext'].values())[0])
+        filename = params().filenames['parsed_news_uc_ext']
+    else:
+        U_set = set(list(params().dicts['uncertainty'].values())[0])
+        filename = params().filenames['parsed_news_uc']
+    print(U_set)
+
+    print(f"Counting uncertainty words...")
+
+    #compare to dictionary
+    with Pool(workers) as pool:
+        df['u_count'] = pool.map(partial(_count,
+                                 word_set=U_set),
+                                 df['body'].values.tolist())
+
+    N_list = list(params().dicts['negations'].values())[0]
+    with Pool(workers) as pool:
+        df['n_count'] = pool.map(partial(_count,
+                             word_set=N_list),
+                             df['body'].values.tolist())
+
+    return df
+
+
+def _count(text, word_set):
+    count = 0
+    for word in word_set:
+        count += text.count(word)
+    return count
